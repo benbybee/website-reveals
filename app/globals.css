@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #faf9f5;
+  --color-surface: #ffffff;
+  --color-surface-2: #f4f3ee;
+  --color-border: #e8e6df;
+  --color-text: #111110;
+  --color-muted: #888886;
+  --color-subtle: #c8c6be;
+  --color-orange: #ff3d00;
+
+  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+html, body {
+  background: #faf9f5;
+  color: #111110;
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  font-family: var(--font-sans), 'DM Sans', sans-serif;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #faf9f5; }
+::-webkit-scrollbar-thumb { background: #ff3d00; border-radius: 2px; }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+@media (min-width: 768px) { .wrap { padding: 0 48px; } }
+
+/* buttons */
+.btn-orange {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-sans); font-weight: 600; font-size: 15px;
+  padding: 13px 32px; background: #ff3d00; color: #fff;
+  border-radius: 3px; border: none; cursor: pointer;
+  text-decoration: none; transition: background 0.12s;
+}
+.btn-orange:hover { background: #d43000; }
+
+.btn-outline {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-sans); font-weight: 500; font-size: 15px;
+  padding: 13px 32px; background: transparent; color: #111110;
+  border-radius: 3px; border: 1.5px solid #d8d6cf;
+  cursor: pointer; text-decoration: none; transition: border-color 0.12s;
+}
+.btn-outline:hover { border-color: #111110; }
+
+/* eyebrow label */
+.eyebrow {
+  font-family: var(--font-mono); font-size: 11px;
+  font-weight: 500; letter-spacing: 0.14em;
+  text-transform: uppercase; color: #ff3d00;
+}
+
+/* form inputs */
+.field {
+  width: 100%; font-family: var(--font-sans); font-size: 15px;
+  color: #111110; background: #fff; border: 1.5px solid #b8b6ae;
+  border-radius: 4px; padding: 12px 16px; outline: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.field::placeholder { color: #a8a6a0; }
+.field:focus { border-color: #ff3d00; box-shadow: 0 0 0 3px rgba(255,61,0,0.08); }
+
+/* form question wrapper */
+.question { display: flex; flex-direction: column; gap: 8px; }
+
+/* form nav */
+.btn-back {
+  font-family: var(--font-sans); font-size: 14px; font-weight: 500;
+  color: #888886; background: transparent;
+  border: 1.5px solid #d8d6cf; border-radius: 4px;
+  padding: 11px 24px; cursor: pointer; transition: all 0.12s;
+}
+.btn-back:hover:not(:disabled) { border-color: #888886; color: #111110; }
+.btn-back:disabled { opacity: 0.3; cursor: not-allowed; }

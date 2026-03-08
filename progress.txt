@@ -1,0 +1,26 @@
+# Obsession Marketing Onboarding Site — Progress
+
+## Plan
+docs/plans/2026-03-06-obsession-marketing-onboarding-site-plan.md
+
+## Tasks
+
+- [x] Task 1: Scaffold Next.js project — Next.js 16, all deps installed, build passes
+- [x] Task 2: Design system — Tailwind v4 @theme CSS config, Syne/Inter/JetBrains fonts, glow utilities
+- [x] Task 3: Supabase setup — client/server clients, types, SQL migration file
+- [x] Task 4: API routes — Form session CRUD (start, get, update, save-email, submit)
+- [x] Task 5: DNS instructions library — per-provider HTML email templates
+- [x] Task 6: Capture portfolio screenshots — 7 sites captured as PNG
+- [x] Task 7: Animated background components
+- [x] Task 8: Landing page — Hero section
+- [x] Task 9: Landing page — Portfolio section
+- [x] Task 10: Landing page — Process, Trust & Final CTA sections
+- [x] Task 11: Landing page — Assembled, build passes
+- [x] Task 12: Questionnaire — Form state & step definitions (form-steps.ts, use-form-session.ts)
+- [x] Task 13: Questionnaire — UI components (ProgressBar, FormLayout, StepCard, DnsSelector, QuestionField, SaveModal)
+- [x] Task 14: Questionnaire — Page routes (/start, /q/[token], /q/[token]/expired, /success) + FormShell orchestrator
+- [x] Task 15: File upload integration (api/upload/route.ts, Supabase Storage migration, append_file_url RPC)
+- [x] Task 16: Final polish — turbopack.root config, expired session page, clean build verified
+- [x] Task 17: Deploy to Vercel — https://obsession-marketing-onboarding.vercel.app (add env vars in Vercel dashboard)
+
+## Notes

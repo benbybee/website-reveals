@@ -63,25 +63,47 @@ export const SHARED_INSTRUCTIONS = `
    \`\`\`
    Use the business name to derive a URL-friendly slug (lowercase, hyphens, no special chars).
 
-2. **Build the site using the /wordpress-site-builder skill.**
-   - Skip the discovery/questionnaire phase — all client information is in the brief below.
-   - Follow the skill's full pipeline: design → HTML mockup → deploy to Cloudways.
-   - Use automated Cloudways provisioning (clone from template).
+2. **Clone the template site on Cloudways (MANDATORY — do NOT skip this step):**
+   The template site is a pre-configured WordPress install with the WIAD Blank Theme and MC Connector plugin.
+   You MUST clone it to create a NEW app for this client. NEVER deploy directly to the template.
 
-3. **Commit all generated files to the repo and push:**
+   **Template details:**
+   - Server ID: \`1595966\`
+   - App ID: \`6251852\`
+   - Template URL: \`https://wordpress-1595966-6251852.cloudwaysapps.com\` (DO NOT deploy here)
+
+   **Clone steps:**
+   a. Load \`CLOUDWAYS_EMAIL\` and \`CLOUDWAYS_API_KEY\` from environment or \`cli/.env\`.
+   b. Authenticate: \`POST https://api.cloudways.com/api/v1/oauth/access_token\`
+   c. Clone the app: \`POST https://api.cloudways.com/api/v1/app/clone\` with \`server_id="1595966"\`, \`app_id="6251852"\`, \`app_label="<SLUG>"\`
+   d. Poll \`GET https://api.cloudways.com/api/v1/server\` until the new cloned app appears (30-60s).
+   e. The NEW cloned app will have a different app ID and URL — use THAT for all subsequent steps.
+   f. SSH into the server and create a fresh WP Application Password on the CLONE:
+      \`\`\`bash
+      wp user application-password create 1 mc-connector-api --porcelain --allow-root
+      \`\`\`
+   g. Get the WP username: \`wp user get 1 --field=user_login --allow-root\`
+
+3. **Build the site using the /wordpress-site-builder skill.**
+   - Skip the discovery/questionnaire phase — all client information is in the brief below.
+   - Follow the skill's full pipeline: design → HTML mockup → deploy to the NEW CLONED Cloudways app.
+   - Use the cloned app's URL and fresh Application Password from step 2.
+
+4. **Commit all generated files to the repo and push:**
    \`\`\`bash
    git add -A
    git commit -m "feat: initial site build for <BUSINESS_NAME>"
    git push -u origin main
    \`\`\`
 
-4. **When complete, output these exact lines (the system parses them):**
+5. **When complete, output these exact lines (the system parses them):**
    \`\`\`
    BUILD_RESULT_REPO_URL: https://github.com/obsession-marketing/<SLUG>
-   BUILD_RESULT_SITE_URL: <live Cloudways URL or custom domain>
+   BUILD_RESULT_SITE_URL: <the NEW cloned Cloudways app URL — NOT the template URL>
    \`\`\`
 
-## Important
+## Critical Rules
+- **NEVER deploy to the template site** (wordpress-1595966-6251852). Always clone first.
 - Use the client brief below as your ONLY source of requirements. Do not ask for clarification.
 - If information is missing, make reasonable professional decisions.
 - The site must be fully deployed and live when you're done.

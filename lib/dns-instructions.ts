@@ -10,7 +10,7 @@ const PROVIDERS: Record<string, { name: string; steps: string[] }> = {
       "Change the 'Points to' value to: <strong>{{IP}}</strong>",
       "Set TTL to 1 hour (600 seconds)",
       "Click Save",
-      "To grant DNS access: Go to Settings &rarr; Delegate Access &rarr; Invite <strong>{{AGENCY_EMAIL}}</strong> with 'Domains' permission",
+      '<strong>Grant us delegate access:</strong> Follow <a href="https://www.godaddy.com/help/access-another-persons-account-as-a-delegate-12373" style="color:#3b82f6;">these instructions</a> to add <strong>creative@obsessionmarketing.com</strong> as a delegate with <strong>Domains</strong> permission',
     ],
   },
   namecheap: {
@@ -25,7 +25,7 @@ const PROVIDERS: Record<string, { name: string; steps: string[] }> = {
       "Change the 'Value' to: <strong>{{IP}}</strong>",
       "Set TTL to Automatic",
       "Click the green checkmark to save",
-      "To share access: Go to Profile &rarr; Sharing &amp; Transfer &rarr; Share this account with <strong>{{AGENCY_EMAIL}}</strong>",
+      "To share access: Go to Profile &rarr; Sharing &amp; Transfer &rarr; Share this account with <strong>creative@obsessionmarketing.com</strong>",
     ],
   },
   cloudflare: {
@@ -40,7 +40,7 @@ const PROVIDERS: Record<string, { name: string; steps: string[] }> = {
       "Change the IPv4 address to: <strong>{{IP}}</strong>",
       "Set Proxy status to <strong>DNS only</strong> (grey cloud icon)",
       "Click <strong>Save</strong>",
-      "To grant access: Go to Manage Account &rarr; Members &rarr; Invite <strong>{{AGENCY_EMAIL}}</strong> as Administrator",
+      "To grant access: Go to Manage Account &rarr; Members &rarr; Invite <strong>creative@obsessionmarketing.com</strong> as Administrator",
     ],
   },
   google: {
@@ -54,7 +54,7 @@ const PROVIDERS: Record<string, { name: string; steps: string[] }> = {
       "Click <strong>Edit</strong>",
       "Change the data/value to: <strong>{{IP}}</strong>",
       "Click <strong>Save</strong>",
-      "To share access: Scroll to Domain permissions &rarr; Add <strong>{{AGENCY_EMAIL}}</strong> as an editor",
+      "To share access: Scroll to Domain permissions &rarr; Add <strong>creative@obsessionmarketing.com</strong> as an editor",
     ],
   },
   networksolutions: {
@@ -68,7 +68,7 @@ const PROVIDERS: Record<string, { name: string; steps: string[] }> = {
       "Find the A record for your domain",
       "Edit the IP address to: <strong>{{IP}}</strong>",
       "Click <strong>Apply Changes</strong>",
-      "For access delegation, call Network Solutions support or email your login credentials securely to <strong>{{AGENCY_EMAIL}}</strong>",
+      "For access delegation, call Network Solutions support or add <strong>creative@obsessionmarketing.com</strong> as an authorized user on your account",
     ],
   },
   other: {
@@ -79,7 +79,7 @@ const PROVIDERS: Record<string, { name: string; steps: string[] }> = {
       "Look for an <strong>A Record</strong> pointing to your root domain (@)",
       "Edit it and change the IP address / value to: <strong>{{IP}}</strong>",
       "Save the change",
-      "Email us at <strong>{{AGENCY_EMAIL}}</strong> with your domain registrar login details or a screenshot of your DNS settings so we can assist",
+      "Grant us access by adding <strong>creative@obsessionmarketing.com</strong> as an admin or developer on your account, or email us at <strong>{{AGENCY_EMAIL}}</strong> with a screenshot of your DNS settings so we can assist",
     ],
   },
 };

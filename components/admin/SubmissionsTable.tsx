@@ -9,7 +9,7 @@ type SortKey = "business_name" | "source" | "email" | "submitted_at";
 type SortDir = "asc" | "desc";
 type ExportFilter = "all" | "new" | "exported";
 
-const SOURCES = ["all", "claim-your-site", "novalux", "new-client"] as const;
+const SOURCES = ["all", "claim-your-site", "novalux", "new-client", "external"] as const;
 
 export function SubmissionsTable({ sessions: initial }: { sessions: FormSession[] }) {
   const router = useRouter();

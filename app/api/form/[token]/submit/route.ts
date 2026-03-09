@@ -70,28 +70,34 @@ export async function POST(
 
   // ── Queue automated website build ──────────────────────────
   try {
+    console.log("[build] Starting build queue for token:", token);
     const formType = resolveFormType(formData);
+    console.log("[build] Form type:", formType);
     const prompt = buildPrompt(formType, formData);
+    console.log("[build] Prompt length:", prompt.length);
 
     // Create build job
-    const { data: buildJob } = await supabase
+    const { data: buildJob, error: buildInsertErr } = await supabase
       .from("build_jobs")
       .insert({ token, form_type: formType })
       .select("id")
       .single();
 
+    console.log("[build] Insert result:", buildJob?.id, "error:", buildInsertErr?.message);
+
     if (buildJob) {
       // Fire Trigger.dev task (non-blocking)
-      await tasks.trigger("build-website", {
+      const triggerResult = await tasks.trigger("build-website", {
         buildJobId: buildJob.id,
         token,
         formType,
         prompt,
       });
+      console.log("[build] Trigger result:", JSON.stringify(triggerResult));
     }
   } catch (buildErr) {
     // Log but don't fail the submission — emails already sent
-    console.error("Failed to queue build job:", buildErr);
+    console.error("[build] Failed to queue build job:", buildErr);
   }
 
   return NextResponse.json({ ok: true });

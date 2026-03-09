@@ -7,16 +7,14 @@ import { mkdtemp, writeFile, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 
-const NOTIFY_START = [
-  "justin@obsessionmarketing.com",
-  "creative@obsessionmarketing.com",
-];
-const NOTIFY_SUCCESS = [
-  "justin@obsessionmarketing.com",
-  "creative@obsessionmarketing.com",
-];
-const NOTIFY_FAILURE = ["creative@obsessionmarketing.com"];
 const FROM = "Website Reveals <creativemarketing@websitereveals.com>";
+
+function getNotifyList(formType: string): string[] {
+  if (formType === "new-client") {
+    return ["justin@obsessionmarketing.com", "creative@obsessionmarketing.com"];
+  }
+  return ["creative@obsessionmarketing.com"];
+}
 
 export const buildWebsite = task({
   id: "build-website",
@@ -57,7 +55,7 @@ export const buildWebsite = task({
     // Notify: build started
     await resend.emails.send({
       from: FROM,
-      to: NOTIFY_START,
+      to: getNotifyList(formType),
       subject: `Build Started — ${businessName}`,
       html: `<p>The automated website build for <strong>${businessName}</strong> has started.</p>
              <p>Form type: ${formType}<br>Build job ID: ${buildJobId}</p>`,
@@ -100,7 +98,7 @@ export const buildWebsite = task({
       // Notify: build succeeded
       await resend.emails.send({
         from: FROM,
-        to: NOTIFY_SUCCESS,
+        to: getNotifyList(formType),
         subject: `Build Complete — ${businessName}`,
         html: `<p>The website build for <strong>${businessName}</strong> has finished successfully.</p>
                <p>Site: <a href="${siteUrl}">${siteUrl}</a><br>
@@ -120,10 +118,10 @@ export const buildWebsite = task({
         })
         .eq("id", buildJobId);
 
-      // Notify: build failed (creative@ only)
+      // Notify: build failed
       await resend.emails.send({
         from: FROM,
-        to: NOTIFY_FAILURE,
+        to: getNotifyList(formType),
         subject: `Build Failed — ${businessName}`,
         html: `<p>The website build for <strong>${businessName}</strong> has failed.</p>
                <p>Error: <code>${errorMsg.slice(0, 500)}</code></p>

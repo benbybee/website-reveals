@@ -41,4 +41,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 
-.vercel
+# sensitive docs (contains integration keys for external agents)
+docs/external-agent-prompt.md

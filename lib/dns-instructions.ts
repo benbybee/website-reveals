@@ -1,3 +1,5 @@
+import { escapeHtml } from "@/lib/sanitize";
+
 const PROVIDERS: Record<string, { name: string; steps: string[] }> = {
   godaddy: {
     name: "GoDaddy",
@@ -111,7 +113,7 @@ export function getDnsInstructions(
       <div style="margin-bottom:32px;">
         <p style="color:#3b82f6;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">Obsession Marketing</p>
         <h1 style="font-size:28px;font-weight:800;margin-bottom:12px;">Point Your Domain</h1>
-        <p style="color:#94a3b8;">Hi ${businessName} team &mdash; here are the steps to connect your domain to your new website on <strong>${config.name}</strong>.</p>
+        <p style="color:#94a3b8;">Hi ${escapeHtml(businessName)} team &mdash; here are the steps to connect your domain to your new website on <strong>${config.name}</strong>.</p>
       </div>
 
       <div style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:8px;padding:16px;margin-bottom:32px;">

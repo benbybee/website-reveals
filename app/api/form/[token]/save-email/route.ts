@@ -13,7 +13,8 @@ export async function POST(
   const { token } = await params;
   const { email } = await req.json();
 
-  if (!email || !email.includes("@")) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || typeof email !== "string" || email.length > 254 || !emailRegex.test(email)) {
     return NextResponse.json({ error: "Invalid email" }, { status: 400 });
   }
 
@@ -25,7 +26,8 @@ export async function POST(
     .eq("token", token);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[save-email] Update failed:", error.message);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 
   const resumeUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/q/${token}`;

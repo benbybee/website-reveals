@@ -2,12 +2,17 @@ import { FORM_STEPS, QUICK_STEPS, STANDARD_STEPS, type FormStep } from "@/lib/fo
 
 /**
  * Sanitize user-provided values to prevent prompt injection.
- * Wraps values in XML fences and strips markdown heading syntax.
+ * Strips markdown headings, code fences, XML-style tags, and
+ * common instruction-override patterns.
  */
 export function sanitizeValue(value: string): string {
   return value
-    .replace(/^#{1,6}\s/gm, "")     // Strip markdown headings
-    .replace(/```/g, "'''")          // Neutralize code fences
+    .replace(/^#{1,6}\s/gm, "")          // Strip markdown headings
+    .replace(/```/g, "'''")               // Neutralize code fences
+    .replace(/<\/?[a-zA-Z][^>]*>/g, "")   // Strip XML/HTML-style tags
+    .replace(/IGNORE\s+(ALL\s+)?PREVIOUS\s+INSTRUCTIONS/gi, "[filtered]")
+    .replace(/SYSTEM\s*:\s*/gi, "[filtered]")
+    .replace(/<<\s*SYS\s*>>/gi, "[filtered]")
     .trim();
 }
 

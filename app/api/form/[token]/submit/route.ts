@@ -5,6 +5,8 @@ import { getDnsInstructions } from "@/lib/dns-instructions";
 import { tasks } from "@trigger.dev/sdk/v3";
 import { resolveFormType } from "@/lib/resolve-form-type";
 import { buildPrompt } from "@/lib/prompts";
+import { FORM_STEPS } from "@/lib/form-steps";
+import { escapeHtml } from "@/lib/sanitize";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
@@ -56,7 +58,7 @@ export async function POST(
     await resend.emails.send({
       from: "Website Reveals <creativemarketing@websitereveals.com>",
       to: clientEmail,
-      subject: `Next Step: Point Your Domain \u2014 ${businessName}`,
+      subject: `Next Step: Point Your Domain \u2014 ${escapeHtml(businessName)}`,
       html: dnsHtml,
     });
   }
@@ -68,7 +70,7 @@ export async function POST(
     await resend.emails.send({
       from: "Website Reveals <creativemarketing@websitereveals.com>",
       to: process.env.AGENCY_EMAIL,
-      subject: `New Questionnaire Submission \u2014 ${businessName}`,
+      subject: `New Questionnaire Submission \u2014 ${escapeHtml(businessName)}`,
       html: buildAgencySummary(session as Record<string, unknown>, exportUrl),
     });
   }
@@ -77,9 +79,9 @@ export async function POST(
   await resend.emails.send({
     from: "Website Reveals <creativemarketing@websitereveals.com>",
     to: "creative@obsessionmarketing.com",
-    subject: `Form Submitted — ${businessName}`,
-    html: `<p>A new questionnaire has been submitted for <strong>${businessName}</strong>.</p>
-           <p>Form type: ${formType}<br>Contact email: ${(formData.contact_email as string) || "Not provided"}<br>Contact phone: ${(formData.contact_phone as string) || "Not provided"}<br>Business email: ${(formData.email as string) || "Not provided"}<br>Business phone: ${(formData.phone as string) || "Not provided"}</p>`,
+    subject: `Form Submitted — ${escapeHtml(businessName)}`,
+    html: `<p>A new questionnaire has been submitted for <strong>${escapeHtml(businessName)}</strong>.</p>
+           <p>Form type: ${escapeHtml(formType)}<br>Contact email: ${escapeHtml((formData.contact_email as string) || "Not provided")}<br>Contact phone: ${escapeHtml((formData.contact_phone as string) || "Not provided")}<br>Business email: ${escapeHtml((formData.email as string) || "Not provided")}<br>Business phone: ${escapeHtml((formData.phone as string) || "Not provided")}</p>`,
   });
 
   // ── Queue automated website build ──────────────────────────
@@ -120,24 +122,22 @@ export async function POST(
 function buildAgencySummary(session: Record<string, unknown>, exportUrl: string): string {
   const formData = (session.form_data as Record<string, unknown>) || {};
 
-  // Build rows using readable labels from form steps
-  const { FORM_STEPS: steps } = require("@/lib/form-steps");
-  const rows = steps.flatMap((step: { title: string; questions: { id: string; label: string }[] }) =>
+  const rows = FORM_STEPS.flatMap((step) =>
     [
-      `<tr><td colspan="2" style="padding:12px 8px 4px;font-weight:700;color:#111110;border-top:2px solid #e8e6df;font-size:13px;letter-spacing:0.05em;text-transform:uppercase">${step.title}</td></tr>`,
+      `<tr><td colspan="2" style="padding:12px 8px 4px;font-weight:700;color:#111110;border-top:2px solid #e8e6df;font-size:13px;letter-spacing:0.05em;text-transform:uppercase">${escapeHtml(step.title)}</td></tr>`,
       ...step.questions
         .filter((q) => formData[q.id] !== undefined && formData[q.id] !== null && formData[q.id] !== "")
         .map((q) => {
           const val = formData[q.id];
           const display = Array.isArray(val) ? (val as string[]).join(", ") : String(val);
-          return `<tr><td style="padding:8px;color:#888886;font-size:13px;vertical-align:top;width:40%;border-bottom:1px solid #e8e6df">${q.label}</td><td style="padding:8px;color:#111110;font-size:13px;border-bottom:1px solid #e8e6df">${display}</td></tr>`;
+          return `<tr><td style="padding:8px;color:#888886;font-size:13px;vertical-align:top;width:40%;border-bottom:1px solid #e8e6df">${escapeHtml(q.label)}</td><td style="padding:8px;color:#111110;font-size:13px;border-bottom:1px solid #e8e6df">${escapeHtml(display)}</td></tr>`;
         }),
     ]
   ).join("");
 
   return `
     <div style="font-family:sans-serif;max-width:800px;margin:0 auto;background:#ffffff;color:#111110;padding:40px;">
-      <h1 style="font-size:22px;font-weight:700;margin-bottom:6px;">New Questionnaire — ${(formData.business_name as string) || "Client"}</h1>
+      <h1 style="font-size:22px;font-weight:700;margin-bottom:6px;">New Questionnaire — ${escapeHtml((formData.business_name as string) || "Client")}</h1>
       <p style="color:#888886;margin-bottom:24px;font-size:14px;">Submitted ${new Date().toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" })}</p>
 
       <div style="background:#fff5f2;border:1.5px solid #ff3d00;border-radius:4px;padding:16px 20px;margin-bottom:32px;">
@@ -147,8 +147,8 @@ function buildAgencySummary(session: Record<string, unknown>, exportUrl: string)
       </div>
 
       <table style="width:100%;border-collapse:collapse;margin-bottom:24px;font-size:13px;">
-        <tr><td style="padding:8px;color:#888886;border-bottom:1px solid #e8e6df">Client Email</td><td style="padding:8px;border-bottom:1px solid #e8e6df">${session.email || "Not provided"}</td></tr>
-        <tr><td style="padding:8px;color:#888886;border-bottom:1px solid #e8e6df">DNS Provider</td><td style="padding:8px;border-bottom:1px solid #e8e6df">${session.dns_provider || "Not selected"}</td></tr>
+        <tr><td style="padding:8px;color:#888886;border-bottom:1px solid #e8e6df">Client Email</td><td style="padding:8px;border-bottom:1px solid #e8e6df">${escapeHtml((session.email as string) || "Not provided")}</td></tr>
+        <tr><td style="padding:8px;color:#888886;border-bottom:1px solid #e8e6df">DNS Provider</td><td style="padding:8px;border-bottom:1px solid #e8e6df">${escapeHtml((session.dns_provider as string) || "Not selected")}</td></tr>
       </table>
 
       <table style="width:100%;border-collapse:collapse;">${rows}</table>

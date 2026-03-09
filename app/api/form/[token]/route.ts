@@ -10,7 +10,7 @@ export async function GET(
 
   const { data, error } = await supabase
     .from("form_sessions")
-    .select("*")
+    .select("token, current_step, form_data, dns_provider, expires_at")
     .eq("token", token)
     .single();
 
@@ -33,6 +33,26 @@ export async function PUT(
   const body = await req.json();
   const supabase = createServerClient();
 
+  // Validate input types
+  if (body.form_data !== undefined && (typeof body.form_data !== "object" || body.form_data === null)) {
+    return NextResponse.json({ error: "form_data must be an object" }, { status: 400 });
+  }
+
+  if (body.current_step !== undefined && typeof body.current_step !== "number") {
+    return NextResponse.json({ error: "current_step must be a number" }, { status: 400 });
+  }
+
+  // Reject updates to already-submitted sessions
+  const { data: existing } = await supabase
+    .from("form_sessions")
+    .select("submitted_at")
+    .eq("token", token)
+    .single();
+
+  if (existing?.submitted_at) {
+    return NextResponse.json({ error: "Session already submitted" }, { status: 409 });
+  }
+
   const { error } = await supabase
     .from("form_sessions")
     .update({
@@ -43,7 +63,8 @@ export async function PUT(
     .eq("token", token);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[form] Update failed:", error.message);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

@@ -4,7 +4,8 @@ import { Resend } from "resend";
 import { getDnsInstructions } from "@/lib/dns-instructions";
 import { tasks } from "@trigger.dev/sdk/v3";
 import { buildPrompt } from "@/lib/prompts";
-import { validateApiKey, validateOrigin, checkRateLimit } from "@/lib/webhook-auth";
+import { validateApiKey, validateOrigin, checkRateLimit, extractClientIp } from "@/lib/webhook-auth";
+import { escapeHtml } from "@/lib/sanitize";
 import type { FormType } from "@/lib/resolve-form-type";
 
 const ALLOWED_FORM_TYPES: FormType[] = ["quick", "standard", "in-depth"];
@@ -25,8 +26,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  if (!checkRateLimit(ip)) {
+  const ip = extractClientIp(req.headers.get("x-forwarded-for"));
+  if (!(await checkRateLimit(ip))) {
     return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
   }
 
@@ -102,7 +103,7 @@ export async function POST(req: NextRequest) {
     await resend.emails.send({
       from: "Website Reveals <creativemarketing@websitereveals.com>",
       to: clientEmail,
-      subject: `Next Step: Point Your Domain — ${businessName}`,
+      subject: `Next Step: Point Your Domain — ${escapeHtml(businessName)}`,
       html: dnsHtml,
     });
   } catch (emailErr) {
@@ -116,9 +117,9 @@ export async function POST(req: NextRequest) {
       await resend.emails.send({
         from: "Website Reveals <creativemarketing@websitereveals.com>",
         to: process.env.AGENCY_EMAIL,
-        subject: `New External Submission — ${businessName}`,
+        subject: `New External Submission — ${escapeHtml(businessName)}`,
         html: `<p>A new website build has been submitted via the external webhook.</p>
-               <p><strong>${businessName}</strong><br>Form type: ${formType}<br>Contact: ${clientEmail}</p>
+               <p><strong>${escapeHtml(businessName)}</strong><br>Form type: ${escapeHtml(formType)}<br>Contact: ${escapeHtml(clientEmail)}</p>
                <p><a href="${siteUrl}/api/export/${token}">Download export</a></p>`,
       });
     } catch (emailErr) {
@@ -131,9 +132,9 @@ export async function POST(req: NextRequest) {
     await resend.emails.send({
       from: "Website Reveals <creativemarketing@websitereveals.com>",
       to: "creative@obsessionmarketing.com",
-      subject: `Form Submitted — ${businessName}`,
-      html: `<p>A new questionnaire has been submitted for <strong>${businessName}</strong>.</p>
-             <p>Form type: ${formType}<br>Source: external webhook<br>Contact email: ${clientEmail}<br>Contact phone: ${(form_data.contact_phone as string) || "Not provided"}<br>Business email: ${(form_data.email as string) || "Not provided"}<br>Business phone: ${(form_data.phone as string) || "Not provided"}</p>`,
+      subject: `Form Submitted — ${escapeHtml(businessName)}`,
+      html: `<p>A new questionnaire has been submitted for <strong>${escapeHtml(businessName)}</strong>.</p>
+             <p>Form type: ${escapeHtml(formType)}<br>Source: external webhook<br>Contact email: ${escapeHtml(clientEmail)}<br>Contact phone: ${escapeHtml((form_data.contact_phone as string) || "Not provided")}<br>Business email: ${escapeHtml((form_data.email as string) || "Not provided")}<br>Business phone: ${escapeHtml((form_data.phone as string) || "Not provided")}</p>`,
     });
   } catch (emailErr) {
     console.error("[webhook] Creative email failed:", emailErr);

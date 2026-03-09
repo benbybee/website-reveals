@@ -32,7 +32,7 @@ export async function POST(
   const resend = getResend();
 
   await resend.emails.send({
-    from: "Obsession Marketing <onboarding@obsessionmarketing.com>",
+    from: "Website Reveals <creativemarketing@websitereveals.com>",
     to: email,
     subject: "Continue Your Website Questionnaire",
     html: `

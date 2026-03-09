@@ -90,7 +90,7 @@ export function getDnsInstructions(
   businessName: string
 ): string {
   const config = PROVIDERS[provider] || PROVIDERS.other;
-  const agencyEmail = process.env.AGENCY_EMAIL || "hello@obsessionmarketing.com";
+  const agencyEmail = process.env.AGENCY_EMAIL || "creativemarketing@websitereveals.com";
 
   const stepsHtml = config.steps
     .map((step, i) => {

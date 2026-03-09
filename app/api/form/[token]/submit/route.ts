@@ -42,6 +42,7 @@ export async function POST(
   const businessName = (formData.business_name as string) || "Your Business";
   const ipAddress = process.env.AGENCY_IP_ADDRESS || "TBD";
   const dnsProvider = (session.dns_provider as string) || "other";
+  const formType = resolveFormType(formData);
 
   const resend = getResend();
 
@@ -49,7 +50,7 @@ export async function POST(
   if (session.email) {
     const dnsHtml = getDnsInstructions(dnsProvider, ipAddress, businessName);
     await resend.emails.send({
-      from: "Obsession Marketing <onboarding@obsessionmarketing.com>",
+      from: "Website Reveals <creativemarketing@websitereveals.com>",
       to: session.email as string,
       subject: `Next Step: Point Your Domain \u2014 ${businessName}`,
       html: dnsHtml,
@@ -61,18 +62,26 @@ export async function POST(
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://obsession-marketing-onboarding.vercel.app";
     const exportUrl = `${siteUrl}/api/export/${token}`;
     await resend.emails.send({
-      from: "Obsession Marketing Forms <onboarding@obsessionmarketing.com>",
+      from: "Website Reveals <creativemarketing@websitereveals.com>",
       to: process.env.AGENCY_EMAIL,
       subject: `New Questionnaire Submission \u2014 ${businessName}`,
       html: buildAgencySummary(session as Record<string, unknown>, exportUrl),
     });
   }
 
+  // Notify creative@ of every form submission
+  await resend.emails.send({
+    from: "Obsession Marketing <onboarding@obsessionmarketing.com>",
+    to: "creative@obsessionmarketing.com",
+    subject: `Form Submitted — ${businessName}`,
+    html: `<p>A new questionnaire has been submitted for <strong>${businessName}</strong>.</p>
+           <p>Form type: ${formType}<br>Client email: ${session.email || "Not provided"}</p>`,
+  });
+
   // ── Queue automated website build ──────────────────────────
   try {
     console.log("[build] Starting build queue for token:", token);
-    const formType = resolveFormType(formData);
-    console.log("[build] Form type:", formType);
+    console.log("[build] Resolved form type:", formType);
     const prompt = buildPrompt(formType, formData);
     console.log("[build] Prompt length:", prompt.length);
 

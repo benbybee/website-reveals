@@ -1,6 +1,7 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { createClient } from "@supabase/supabase-js";
 import { spawn } from "child_process";
+import { createReadStream } from "fs";
 import { mkdtemp, writeFile, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -89,6 +90,7 @@ export const buildWebsite = task({
 
 /**
  * Spawn Claude Code CLI in headless mode.
+ * Pipes the prompt file to stdin (avoids shell arg length limits).
  * Requires `claude` to be installed and authenticated on the VPS.
  */
 function runClaudeCode(promptPath: string, cwd: string): Promise<string> {
@@ -100,14 +102,16 @@ function runClaudeCode(promptPath: string, cwd: string): Promise<string> {
       "claude",
       [
         "-p",                            // Print mode (non-interactive)
-        "--input-file", promptPath,      // Read prompt from file
         "--dangerously-skip-permissions", // No confirmation prompts
         "--output-format", "text",       // Plain text output
-        "--max-turns", "100",            // Allow many agentic turns
         "--verbose",
       ],
-      { cwd, stdio: ["ignore", "pipe", "pipe"] },
+      { cwd, stdio: ["pipe", "pipe", "pipe"] },
     );
+
+    // Pipe prompt file to stdin
+    const promptStream = createReadStream(promptPath);
+    promptStream.pipe(child.stdin);
 
     child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
     child.stderr.on("data", (chunk: Buffer) => errChunks.push(chunk));

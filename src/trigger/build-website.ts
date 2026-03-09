@@ -1,10 +1,22 @@
 import { task } from "@trigger.dev/sdk/v3";
 import { createClient } from "@supabase/supabase-js";
+import { Resend } from "resend";
 import { spawn } from "child_process";
 import { createReadStream } from "fs";
 import { mkdtemp, writeFile, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
+
+const NOTIFY_START = [
+  "justin@obsessionmarketing.com",
+  "creative@obsessionmarketing.com",
+];
+const NOTIFY_SUCCESS = [
+  "justin@obsessionmarketing.com",
+  "creative@obsessionmarketing.com",
+];
+const NOTIFY_FAILURE = ["creative@obsessionmarketing.com"];
+const FROM = "Website Reveals <creativemarketing@websitereveals.com>";
 
 export const buildWebsite = task({
   id: "build-website",
@@ -22,6 +34,17 @@ export const buildWebsite = task({
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
+    const resend = new Resend(process.env.RESEND_API_KEY!);
+
+    // Fetch business name for email context
+    const { data: session } = await supabase
+      .from("form_sessions")
+      .select("form_data")
+      .eq("token", token)
+      .single();
+    const businessName =
+      (session?.form_data as Record<string, unknown>)?.business_name as string ||
+      "Unknown Business";
 
     // Mark as building
     const { error: updateErr } = await supabase
@@ -30,6 +53,15 @@ export const buildWebsite = task({
       .eq("id", buildJobId);
 
     if (updateErr) throw new Error(`Failed to update build status: ${updateErr.message}`);
+
+    // Notify: build started
+    await resend.emails.send({
+      from: FROM,
+      to: NOTIFY_START,
+      subject: `Build Started — ${businessName}`,
+      html: `<p>The automated website build for <strong>${businessName}</strong> has started.</p>
+             <p>Form type: ${formType}<br>Build job ID: ${buildJobId}</p>`,
+    });
 
     let workDir: string | null = null;
 
@@ -65,6 +97,16 @@ export const buildWebsite = task({
         })
         .eq("id", buildJobId);
 
+      // Notify: build succeeded
+      await resend.emails.send({
+        from: FROM,
+        to: NOTIFY_SUCCESS,
+        subject: `Build Complete — ${businessName}`,
+        html: `<p>The website build for <strong>${businessName}</strong> has finished successfully.</p>
+               <p>Site: <a href="${siteUrl}">${siteUrl}</a><br>
+               Repo: <a href="${repoUrl}">${repoUrl}</a></p>`,
+      });
+
       return { status: "deployed", repoUrl, siteUrl };
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -77,6 +119,16 @@ export const buildWebsite = task({
           completed_at: new Date().toISOString(),
         })
         .eq("id", buildJobId);
+
+      // Notify: build failed (creative@ only)
+      await resend.emails.send({
+        from: FROM,
+        to: NOTIFY_FAILURE,
+        subject: `Build Failed — ${businessName}`,
+        html: `<p>The website build for <strong>${businessName}</strong> has failed.</p>
+               <p>Error: <code>${errorMsg.slice(0, 500)}</code></p>
+               <p>Build job ID: ${buildJobId}</p>`,
+      }).catch(() => {}); // Don't let email failure mask the build error
 
       throw err;
     } finally {

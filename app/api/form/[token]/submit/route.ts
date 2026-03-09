@@ -71,7 +71,7 @@ export async function POST(
 
   // Notify creative@ of every form submission
   await resend.emails.send({
-    from: "Obsession Marketing <onboarding@obsessionmarketing.com>",
+    from: "Website Reveals <creativemarketing@websitereveals.com>",
     to: "creative@obsessionmarketing.com",
     subject: `Form Submitted — ${businessName}`,
     html: `<p>A new questionnaire has been submitted for <strong>${businessName}</strong>.</p>

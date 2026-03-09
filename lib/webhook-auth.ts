@@ -10,7 +10,7 @@ export function validateApiKey(headerValue: string | null): boolean {
 export function validateOrigin(origin: string | null): boolean {
   const allowed = process.env.WEBHOOK_ALLOWED_ORIGINS;
   if (!allowed) return true;
-  if (!origin) return false;
+  if (!origin) return true; // no Origin = server-to-server call (API key is the real gate)
   const origins = allowed.split(",").map((o) => o.trim().toLowerCase());
   return origins.includes(origin.toLowerCase());
 }

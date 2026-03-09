@@ -9,7 +9,7 @@ export function buildQuickPrompt(formData: Record<string, unknown>): string {
 ## Mode: Quick Build
 This client provided minimal information via a quick intake form.
 Fill in reasonable defaults for anything not specified:
-- Create a focused site: Home (with hero, services overview, CTA), About, Contact.
+- Build the pages the client selected. If none were selected, default to: Home (with hero, services overview, CTA), About, Contact.
 - Use a clean, professional design that fits their industry.
 - Generate compelling copy based on the business type and services listed.
 - Keep it simple — this client values speed over exhaustive detail.

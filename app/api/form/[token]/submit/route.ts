@@ -47,11 +47,15 @@ export async function POST(
   const resend = getResend();
 
   // Email to client with DNS instructions
-  if (session.email) {
+  const clientEmail =
+    (formData.contact_email as string) ||
+    (formData.email as string) ||
+    (session.email as string);
+  if (clientEmail) {
     const dnsHtml = getDnsInstructions(dnsProvider, ipAddress, businessName);
     await resend.emails.send({
       from: "Website Reveals <creativemarketing@websitereveals.com>",
-      to: session.email as string,
+      to: clientEmail,
       subject: `Next Step: Point Your Domain \u2014 ${businessName}`,
       html: dnsHtml,
     });
@@ -75,7 +79,7 @@ export async function POST(
     to: "creative@obsessionmarketing.com",
     subject: `Form Submitted — ${businessName}`,
     html: `<p>A new questionnaire has been submitted for <strong>${businessName}</strong>.</p>
-           <p>Form type: ${formType}<br>Client email: ${(formData.email as string) || "Not provided"}<br>Client phone: ${(formData.phone as string) || "Not provided"}</p>`,
+           <p>Form type: ${formType}<br>Contact email: ${(formData.contact_email as string) || "Not provided"}<br>Contact phone: ${(formData.contact_phone as string) || "Not provided"}<br>Business email: ${(formData.email as string) || "Not provided"}<br>Business phone: ${(formData.phone as string) || "Not provided"}</p>`,
   });
 
   // ── Queue automated website build ──────────────────────────

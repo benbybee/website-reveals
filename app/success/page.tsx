@@ -7,7 +7,7 @@ export const metadata = {
 const NEXT_STEPS = [
   "We review your answers and build your custom strategy",
   "You point your domain following the email we sent",
-  "We design and build your website (14–21 days)",
+  "We design and build your website (24–48 hours)",
   "You review and approve the final site",
   "We launch — you start getting leads",
 ];

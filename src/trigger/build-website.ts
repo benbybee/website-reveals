@@ -78,31 +78,37 @@ export const buildWebsite = task({
       const repoUrl = extractResult(output, "BUILD_RESULT_REPO_URL");
       const siteUrl = extractResult(output, "BUILD_RESULT_SITE_URL");
 
-      if (!repoUrl || !siteUrl) {
+      if (!siteUrl) {
         throw new Error(
-          `Claude Code finished but did not emit required BUILD_RESULT lines.\nOutput tail:\n${output.slice(-2000)}`
+          `Claude Code finished but did not emit BUILD_RESULT_SITE_URL.\nOutput tail:\n${output.slice(-2000)}`
         );
       }
 
-      // Mark as deployed
+      const missingRepo = !repoUrl;
+
+      // Mark as deployed (site is live even if repo wasn't created)
       await supabase
         .from("build_jobs")
         .update({
           status: "deployed",
           repo_url: repoUrl,
           site_url: siteUrl,
+          error: missingRepo ? "Warning: GitHub repo was not created" : null,
           completed_at: new Date().toISOString(),
         })
         .eq("id", buildJobId);
 
       // Notify: build succeeded
+      const repoLine = repoUrl
+        ? `Repo: <a href="${repoUrl}">${repoUrl}</a>`
+        : `<span style="color:#e65100">⚠ GitHub repo was NOT created — check VPS gh auth</span>`;
       await resend.emails.send({
         from: FROM,
         to: getNotifyList(formType),
         subject: `Build Complete — ${businessName}`,
         html: `<p>The website build for <strong>${businessName}</strong> has finished successfully.</p>
                <p>Site: <a href="${siteUrl}">${siteUrl}</a><br>
-               Repo: <a href="${repoUrl}">${repoUrl}</a></p>`,
+               ${repoLine}</p>`,
       });
 
       return { status: "deployed", repoUrl, siteUrl };

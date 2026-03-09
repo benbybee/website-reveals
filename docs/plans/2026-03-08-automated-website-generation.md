@@ -172,7 +172,7 @@ export const SHARED_INSTRUCTIONS = `
 
 1. **Create GitHub repo:**
    \`\`\`bash
-   gh repo create obsession-marketing/<SLUG> --private --clone
+   gh repo create Website-Reveals/<SLUG> --private --clone
    cd <SLUG>
    \`\`\`
    Use the business name to derive a URL-friendly slug (lowercase, hyphens, no special chars).
@@ -191,7 +191,7 @@ export const SHARED_INSTRUCTIONS = `
 
 4. **When complete, output these exact lines (the system parses them):**
    \`\`\`
-   BUILD_RESULT_REPO_URL: https://github.com/obsession-marketing/<SLUG>
+   BUILD_RESULT_REPO_URL: https://github.com/Website-Reveals/<SLUG>
    BUILD_RESULT_SITE_URL: <live Cloudways URL or custom domain>
    \`\`\`
 

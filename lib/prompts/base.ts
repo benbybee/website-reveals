@@ -56,12 +56,15 @@ export const SHARED_INSTRUCTIONS = `
 
 ## Workflow
 
-1. **Create GitHub repo:**
+**You MUST complete ALL 5 steps below. Do NOT skip any step. The GitHub repo (step 1) and final output (step 5) are REQUIRED.**
+
+1. **Create GitHub repo (REQUIRED — do this FIRST):**
    \`\`\`bash
-   gh repo create obsession-marketing/<SLUG> --private --clone
+   gh repo create Website-Reveals/<SLUG> --private --clone
    cd <SLUG>
    \`\`\`
    Use the business name to derive a URL-friendly slug (lowercase, hyphens, no special chars).
+   If \`gh repo create\` fails, diagnose and fix the issue before continuing. The repo MUST exist.
 
 2. **Clone the template site on Cloudways (MANDATORY — do NOT skip this step):**
    The template site is a pre-configured WordPress install with the WIAD Blank Theme and MC Connector plugin.
@@ -89,21 +92,24 @@ export const SHARED_INSTRUCTIONS = `
    - Follow the skill's full pipeline: design → HTML mockup → deploy to the NEW CLONED Cloudways app.
    - Use the cloned app's URL and fresh Application Password from step 2.
 
-4. **Commit all generated files to the repo and push:**
+4. **Commit all generated files to the repo and push (REQUIRED):**
    \`\`\`bash
    git add -A
    git commit -m "feat: initial site build for <BUSINESS_NAME>"
    git push -u origin main
    \`\`\`
+   This step is NOT optional. Every build must be committed to the GitHub repo created in step 1.
 
-5. **When complete, output these exact lines (the system parses them):**
+5. **Output these exact lines as the LAST thing you do (REQUIRED — the system parses them):**
    \`\`\`
-   BUILD_RESULT_REPO_URL: https://github.com/obsession-marketing/<SLUG>
+   BUILD_RESULT_REPO_URL: https://github.com/Website-Reveals/<SLUG>
    BUILD_RESULT_SITE_URL: <the NEW cloned Cloudways app URL — NOT the template URL>
    \`\`\`
+   Both lines MUST appear in your final output. If either is missing, the build is flagged as incomplete.
 
 ## Critical Rules
 - **NEVER deploy to the template site** (wordpress-1595966-6251852). Always clone first.
+- **ALWAYS create and push to a GitHub repo.** No exceptions.
 - Use the client brief below as your ONLY source of requirements. Do not ask for clarification.
 - If information is missing, make reasonable professional decisions.
 - The site must be fully deployed and live when you're done.

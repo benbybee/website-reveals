@@ -1,12 +1,13 @@
-import { SHARED_INSTRUCTIONS, sanitizeValue } from "./base";
+import { SHARED_INSTRUCTIONS, sanitizeValue, buildImageInstructions } from "./base";
 
 /**
  * Novalux has a custom single-page form with fewer fields.
  * The brief is built manually since it doesn't use FORM_STEPS.
  */
-export function buildNovaluxPrompt(formData: Record<string, unknown>): string {
+export function buildNovaluxPrompt(formData: Record<string, unknown>, fileUrls: string[] = []): string {
   const fd = formData as Record<string, string | undefined>;
   const businessName = fd.business_name || "Client";
+  const imageInstructions = buildImageInstructions(formData, fileUrls);
 
   const brief = [
     `### Business Details`,
@@ -31,8 +32,17 @@ export function buildNovaluxPrompt(formData: Record<string, unknown>): string {
 ## Mode: NovaLux Client
 This is a NovaLux partner client. Build a professional site based on the info provided:
 - Pages: Home, About, Services, Contact — plus any others the business details suggest.
-- Use a clean, modern design appropriate for their industry.
 - Write compelling copy based on the business name, services, and service areas.
+
+## Design Direction
+Do NOT build a generic template site. Even with minimal info, make it distinctive:
+- **Research the industry** using Firecrawl — search for top businesses in their space/location to understand visual conventions, then EXCEED them.
+- Pick a design personality based on the industry. A plumber needs trust and professionalism. A boutique needs elegance. A contractor needs bold and rugged.
+- Choose a Google Font pairing that fits the industry (NOT Inter, Roboto, or Open Sans).
+- Derive a color palette from industry research — avoid generic blue/gray defaults.
+- Use varied section layouts: not every section should be centered text over a colored background.
+
+${imageInstructions}
 ${SHARED_INSTRUCTIONS}
 ## Client Brief
 

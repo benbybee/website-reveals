@@ -49,6 +49,112 @@ export function getStepsForFormType(formType: string): FormStep[] {
 }
 
 /**
+ * Build image sourcing instructions based on available assets.
+ * Priority: uploaded files > scrape existing site > industry stock photos.
+ */
+export function buildImageInstructions(
+  formData: Record<string, unknown>,
+  fileUrls: string[],
+): string {
+  const sections: string[] = [];
+  const currentUrl = formData.current_url as string | undefined;
+
+  // 1. Uploaded assets (logo, brand photos, guidelines)
+  if (fileUrls.length > 0) {
+    sections.push(`### Uploaded Client Assets
+The client uploaded the following files. Download and use these on the site:
+${fileUrls.map((url) => `- ${url}`).join("\n")}
+
+**Instructions:**
+- If any file looks like a logo, use it in the header/navbar and footer.
+- If any files are photos, use them as hero images, about section backgrounds, or team photos — wherever they fit naturally.
+- Upload all client-provided images to WordPress via the REST API media endpoint before referencing them.`);
+  }
+
+  // 2. Existing website to scrape
+  if (currentUrl) {
+    sections.push(`### Scrape Images from Existing Website
+The client has an existing website at: ${currentUrl}
+
+**Use \`firecrawl_scrape\` on this URL to extract:**
+- Their logo image (check \`<img>\` tags, \`<link rel="icon">\`, and CSS background images)
+- Hero/banner images
+- Team or staff photos
+- Product/service photos
+- Any other visual assets worth reusing
+
+Then use \`firecrawl_crawl\` to discover subpages and scrape additional images from About, Services, Gallery, and Team pages.
+
+Download the best images and upload them to the new WordPress site via the WP REST API media endpoint. These are REAL photos of their actual business — they are far more valuable than any stock photo.`);
+  }
+
+  // 3. Fallback: stock images via Firecrawl search
+  sections.push(`### Image Sourcing (When No Client Assets Available)
+If the client did not upload photos AND there is no existing website to scrape, you MUST still include real images on the site. Do NOT leave empty image placeholders.
+
+**Use Firecrawl search to find real stock photos:**
+1. Use \`firecrawl_search\` to search for royalty-free images by industry keyword on Unsplash or Pexels. Example searches:
+   - "site:unsplash.com plumbing workshop"
+   - "site:pexels.com dental office interior"
+   - "site:unsplash.com restaurant food photography"
+2. Extract the actual image URLs from search results and use them directly.
+3. For icons and illustrations, use inline SVGs or an icon library — never leave icon slots empty.
+
+**Do NOT guess or fabricate image URLs.** Always use Firecrawl search to find real, working image URLs.
+
+**Every page must have at least one meaningful image.** Hero sections, about sections, and service cards should all have relevant visuals.`);
+
+  return `## Images & Visual Assets\n\n${sections.join("\n\n")}`;
+}
+
+/**
+ * Build Firecrawl-based inspiration site analysis instructions.
+ * Returns empty string if no inspiration sites were provided.
+ */
+export function buildInspirationInstructions(
+  formData: Record<string, unknown>,
+): string {
+  const inspirationSites = formData.inspiration_sites as string | undefined;
+  const brandColors = formData.brand_colors as string | undefined;
+  const hexCodes = formData.hex_codes as string | undefined;
+
+  if (!inspirationSites?.trim()) return "";
+
+  const colorEnforcement = brandColors || hexCodes
+    ? `\n**CRITICAL — Brand Color Override:**
+The client provided their own brand colors: ${brandColors || ""}${hexCodes ? ` (hex: ${hexCodes})` : ""}
+You MUST use these as the primary and accent colors. The inspiration sites inform LAYOUT, TYPOGRAPHY, SPACING, and VISUAL STYLE — but the COLOR PALETTE must come from the client's brand. Map the inspiration site's color roles (primary, accent, background, text) to the client's brand colors.`
+    : `\nThe client did not specify brand colors. Extract a cohesive color palette from the inspiration sites and adapt it to feel fresh — shift hues slightly, adjust saturation, or recombine to avoid looking like a direct copy.`;
+
+  return `## Design Inspiration — MANDATORY Firecrawl Analysis
+
+The client listed these as sites they admire:
+${inspirationSites}
+
+**You MUST use Firecrawl to deeply analyze each inspiration URL before designing anything.** This is not optional.
+
+### What to Extract from Each Inspiration Site:
+1. **Layout architecture** — How is the hero structured? Grid vs. single-column? How are services/features presented? Card layouts, bento grids, alternating sections?
+2. **Typography system** — What font pairing do they use? What are the heading sizes relative to body? Letter-spacing, line-height, weight contrasts?
+3. **Spacing & rhythm** — Section padding, element gaps, whitespace strategy. Dense or airy?
+4. **Visual effects** — Animations, hover states, gradients, overlays, shadows, border-radius patterns
+5. **Navigation style** — Sticky? Transparent over hero? Hamburger on desktop or only mobile?
+6. **Section patterns** — Testimonial layout, CTA design, footer complexity, social proof placement
+7. **Overall personality** — Minimal? Bold? Playful? Corporate? Luxurious? Earthy?
+
+### How to Apply What You Learn:
+- **DO** replicate the LAYOUT PATTERNS and SPACING RHYTHM from the inspiration sites
+- **DO** match the TYPOGRAPHY HIERARCHY (similar font weights, size ratios, letter-spacing)
+- **DO** adopt the same VISUAL PERSONALITY and LEVEL OF POLISH
+- **DO** use similar SECTION STRUCTURES and CONTENT FLOW
+- **DO NOT** copy content, logos, or exact color values from inspiration sites
+- **DO NOT** ignore the inspiration sites and fall back to a generic template
+${colorEnforcement}
+
+The goal: someone looking at the inspiration site and the new build should think "these were designed by someone with similar taste" — not "these are the same template."`;
+}
+
+/**
  * Shared instructions appended to every prompt.
  */
 export const SHARED_INSTRUCTIONS = `

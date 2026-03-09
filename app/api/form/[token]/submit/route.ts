@@ -86,7 +86,8 @@ export async function POST(
   try {
     console.log("[build] Starting build queue for token:", token);
     console.log("[build] Resolved form type:", formType);
-    const prompt = buildPrompt(formType, formData);
+    const fileUrls = (session.file_urls as string[]) || [];
+    const prompt = buildPrompt(formType, formData, fileUrls);
     console.log("[build] Prompt length:", prompt.length);
 
     // Create build job

@@ -5,7 +5,7 @@ import { buildInDepthPrompt } from "./in-depth";
 import { buildNovaluxPrompt } from "./novalux";
 import { buildNewClientPrompt } from "./new-client";
 
-type PromptBuilder = (formData: Record<string, unknown>) => string;
+type PromptBuilder = (formData: Record<string, unknown>, fileUrls: string[]) => string;
 
 /**
  * Registry of prompt builders keyed by form type.
@@ -24,10 +24,11 @@ const PROMPT_BUILDERS: Record<FormType, PromptBuilder> = {
 export function buildPrompt(
   formType: FormType,
   formData: Record<string, unknown>,
+  fileUrls: string[] = [],
 ): string {
   const builder = PROMPT_BUILDERS[formType];
   if (!builder) {
     throw new Error(`No prompt template for form type: ${formType}`);
   }
-  return builder(formData);
+  return builder(formData, fileUrls);
 }

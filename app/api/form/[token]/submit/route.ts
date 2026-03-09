@@ -75,7 +75,7 @@ export async function POST(
     to: "creative@obsessionmarketing.com",
     subject: `Form Submitted — ${businessName}`,
     html: `<p>A new questionnaire has been submitted for <strong>${businessName}</strong>.</p>
-           <p>Form type: ${formType}<br>Client email: ${session.email || "Not provided"}</p>`,
+           <p>Form type: ${formType}<br>Client email: ${(formData.email as string) || "Not provided"}<br>Client phone: ${(formData.phone as string) || "Not provided"}</p>`,
   });
 
   // ── Queue automated website build ──────────────────────────

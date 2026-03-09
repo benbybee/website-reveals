@@ -29,12 +29,10 @@ export function buildNovaluxPrompt(formData: Record<string, unknown>): string {
   return `You are building a WordPress website for "${businessName}".
 
 ## Mode: NovaLux Client
-This is a NovaLux partner client. NovaLux-specific requirements:
-- TODO: Add NovaLux-specific design requirements here.
-- TODO: Add NovaLux-specific page structure here.
-- TODO: Add NovaLux brand guidelines reference here.
-
-Replace the TODOs above with the actual NovaLux requirements before going live.
+This is a NovaLux partner client. Build a professional site based on the info provided:
+- Pages: Home, About, Services, Contact — plus any others the business details suggest.
+- Use a clean, modern design appropriate for their industry.
+- Write compelling copy based on the business name, services, and service areas.
 ${SHARED_INSTRUCTIONS}
 ## Client Brief
 

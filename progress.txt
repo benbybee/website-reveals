@@ -1,26 +1,67 @@
-# Obsession Marketing Onboarding Site — Progress
+# Client Task Management System — Progress
 
-## Plan
-docs/plans/2026-03-06-obsession-marketing-onboarding-site-plan.md
+Plan: docs/plans/2026-03-10-client-task-management-plan.md
 
-## Tasks
+## Phase 1: Database Foundation
+- [ ] Task 1: Create database migration for all new tables
+- [ ] Task 2: Create TypeScript type definitions
 
-- [x] Task 1: Scaffold Next.js project — Next.js 16, all deps installed, build passes
-- [x] Task 2: Design system — Tailwind v4 @theme CSS config, Syne/Inter/JetBrains fonts, glow utilities
-- [x] Task 3: Supabase setup — client/server clients, types, SQL migration file
-- [x] Task 4: API routes — Form session CRUD (start, get, update, save-email, submit)
-- [x] Task 5: DNS instructions library — per-provider HTML email templates
-- [x] Task 6: Capture portfolio screenshots — 7 sites captured as PNG
-- [x] Task 7: Animated background components
-- [x] Task 8: Landing page — Hero section
-- [x] Task 9: Landing page — Portfolio section
-- [x] Task 10: Landing page — Process, Trust & Final CTA sections
-- [x] Task 11: Landing page — Assembled, build passes
-- [x] Task 12: Questionnaire — Form state & step definitions (form-steps.ts, use-form-session.ts)
-- [x] Task 13: Questionnaire — UI components (ProgressBar, FormLayout, StepCard, DnsSelector, QuestionField, SaveModal)
-- [x] Task 14: Questionnaire — Page routes (/start, /q/[token], /q/[token]/expired, /success) + FormShell orchestrator
-- [x] Task 15: File upload integration (api/upload/route.ts, Supabase Storage migration, append_file_url RPC)
-- [x] Task 16: Final polish — turbopack.root config, expired session page, clean build verified
-- [x] Task 17: Deploy to Vercel — https://obsession-marketing-onboarding.vercel.app (add env vars in Vercel dashboard)
+## Phase 2: Core Library Functions
+- [ ] Task 3: PIN generation and hashing utilities
+- [ ] Task 4: Client CRUD library functions
+- [ ] Task 5: Task CRUD library functions
+- [ ] Task 6: Portal authentication (JWT-based PIN login)
+
+## Phase 3: Email Notifications
+- [ ] Task 7: Task notification email templates and sender
+
+## PHASE GATE 1-3: Run npx tsc --noEmit && npm run build
+
+## Phase 4: Admin API Routes
+- [ ] Task 8: Client management API routes
+- [ ] Task 9: Task management API routes
+- [ ] Task 10: Portal API routes (login, tasks, comments)
+
+## PHASE GATE 4-6: Run npx tsc --noEmit && npm run build
+
+## Phase 5-6: Admin UI — Client Management
+- [ ] Task 11: Update admin navigation
+- [ ] Task 12: Build ClientsPanel component
+- [ ] Task 13: Build ClientDetailDrawer component
+
+## Phase 6: Admin UI — Task Management
+- [ ] Task 14: Build TasksPanel with board and list views
+- [ ] Task 15: Build TaskDetailDrawer component
+- [ ] Task 16: Add task modal component
+
+## Phase 7: Client Portal UI
+- [ ] Task 17: Portal login page
+- [ ] Task 18: Portal layout and middleware
+- [ ] Task 19: Portal dashboard page
+- [ ] Task 20: Portal tasks page with inline detail
+
+## PHASE GATE 7-8: Run npx tsc --noEmit && npm run build
+
+## Phase 8: Auto-Create Clients from Form Submissions
+- [ ] Task 21: Hook into form submission to auto-create clients
+
+## Phase 9: AI Agent
+- [ ] Task 22: Install Anthropic SDK and create AI utilities
+- [ ] Task 23: Create Trigger.dev AI tasks
+
+## Phase 10-12: Integrations
+- [ ] Task 24: Telegram bot utilities and webhook
+- [ ] Task 25: Slack webhook handler
+- [ ] Task 26: Resend inbound email webhook
+
+## PHASE GATE 9-12: Run npx tsc --noEmit && npm run build
+
+## Phase 13: Wiring
+- [ ] Task 27: Update environment configuration
+- [ ] Task 28: Wire AI estimates into task creation and status changes
+- [ ] Task 29: Send Telegram notifications for client comments/requests
+
+## Phase 14: Verification
+- [ ] Task 30: Manual integration test checklist
 
 ## Notes

@@ -7,6 +7,8 @@ import { buildPrompt } from "@/lib/prompts";
 import { validateApiKey, validateOrigin, checkRateLimit, extractClientIp } from "@/lib/webhook-auth";
 import { escapeHtml } from "@/lib/sanitize";
 import type { FormType } from "@/lib/resolve-form-type";
+import { getClientByEmail, createClient, updateClient } from "@/lib/clients";
+import { sendWelcomeEmail } from "@/lib/task-emails";
 
 const ALLOWED_FORM_TYPES: FormType[] = ["quick", "standard", "in-depth"];
 
@@ -91,6 +93,33 @@ export async function POST(req: NextRequest) {
 
   const token = session.token;
   const businessName = (form_data.business_name as string) || "Your Business";
+
+  // Auto-create client from webhook submission
+  const webhookClientEmail = form_data.contact_email as string;
+  if (webhookClientEmail) {
+    try {
+      const existingClient = await getClientByEmail(webhookClientEmail);
+      if (!existingClient) {
+        const contactName = (form_data.contact_name as string) || "";
+        const nameParts = contactName.split(" ");
+        const { client, pin } = await createClient({
+          first_name: nameParts[0] || "Client",
+          last_name: nameParts.slice(1).join(" ") || "",
+          company_name: businessName,
+          email: webhookClientEmail,
+          phone: (form_data.contact_phone as string) || (form_data.phone as string),
+          website_url: form_data.current_website as string,
+          form_session_token: token,
+        });
+        await sendWelcomeEmail(client, pin);
+      } else if (!existingClient.form_session_token) {
+        await updateClient(existingClient.id, { form_session_token: token });
+      }
+    } catch (clientErr) {
+      console.error("[webhook] Client auto-creation failed:", clientErr);
+    }
+  }
+
   const resend = getResend();
 
   // DNS instructions to client

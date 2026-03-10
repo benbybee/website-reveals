@@ -1,12 +1,13 @@
 import { createServerClient } from "@/lib/supabase/server";
 import { createSSRClient } from "@/lib/supabase/server-ssr";
-import { SubmissionsTable } from "@/components/admin/SubmissionsTable";
+import { AdminShell } from "@/components/admin/AdminShell";
 import type { FormSession } from "@/lib/supabase/types";
+import type { Client, TaskWithClient } from "@/lib/types/client-tasks";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Admin — Obsession Marketing",
+  title: "Admin — Website Reveals",
 };
 
 export default async function AdminPage() {
@@ -16,15 +17,32 @@ export default async function AdminPage() {
     data: { user },
   } = await ssrClient.auth.getUser();
 
-  const { data: sessions, error } = await supabase
-    .from("form_sessions")
-    .select("*")
-    .not("submitted_at", "is", null)
-    .order("submitted_at", { ascending: false });
+  const [sessionsRes, clientsRes, tasksRes] = await Promise.all([
+    supabase
+      .from("form_sessions")
+      .select("*")
+      .not("submitted_at", "is", null)
+      .order("submitted_at", { ascending: false }),
+    supabase
+      .from("clients")
+      .select("*")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("tasks")
+      .select(
+        "*, client:clients(id, first_name, last_name, company_name, email)"
+      )
+      .is("parent_task_id", null)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: false }),
+  ]);
 
-  if (error) {
-    console.error("Failed to fetch submissions:", error);
-  }
+  if (sessionsRes.error)
+    console.error("Failed to fetch submissions:", sessionsRes.error);
+  if (clientsRes.error)
+    console.error("Failed to fetch clients:", clientsRes.error);
+  if (tasksRes.error)
+    console.error("Failed to fetch tasks:", tasksRes.error);
 
   return (
     <div
@@ -34,67 +52,13 @@ export default async function AdminPage() {
         padding: "32px 24px 80px",
       }}
     >
-      <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-        {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "36px",
-            flexWrap: "wrap",
-            gap: "16px",
-          }}
-        >
-          <div>
-            <p className="eyebrow" style={{ marginBottom: "6px" }}>
-              Admin
-            </p>
-            <h1
-              style={{
-                fontFamily: "var(--font-serif)",
-                fontSize: "clamp(1.5rem, 4vw, 2rem)",
-                fontWeight: 700,
-                color: "#111110",
-              }}
-            >
-              Submissions
-            </h1>
-          </div>
-          <div
-            style={{ display: "flex", alignItems: "center", gap: "16px" }}
-          >
-            <span
-              style={{
-                fontFamily: "var(--font-sans)",
-                fontSize: "13px",
-                color: "#888886",
-              }}
-            >
-              {user?.email}
-            </span>
-            <form action="/admin/logout" method="POST">
-              <button
-                type="submit"
-                style={{
-                  fontFamily: "var(--font-sans)",
-                  fontSize: "13px",
-                  fontWeight: 500,
-                  color: "#888886",
-                  background: "transparent",
-                  border: "1.5px solid #d8d6cf",
-                  borderRadius: "3px",
-                  padding: "6px 16px",
-                  cursor: "pointer",
-                }}
-              >
-                Sign Out
-              </button>
-            </form>
-          </div>
-        </div>
-
-        <SubmissionsTable sessions={(sessions as FormSession[]) || []} />
+      <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
+        <AdminShell
+          sessions={(sessionsRes.data as FormSession[]) || []}
+          clients={(clientsRes.data as Client[]) || []}
+          tasks={(tasksRes.data as TaskWithClient[]) || []}
+          userEmail={user?.email || ""}
+        />
       </div>
     </div>
   );

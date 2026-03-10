@@ -7,6 +7,8 @@ import { resolveFormType } from "@/lib/resolve-form-type";
 import { buildPrompt } from "@/lib/prompts";
 import { FORM_STEPS } from "@/lib/form-steps";
 import { escapeHtml } from "@/lib/sanitize";
+import { getClientByEmail, createClient, updateClient } from "@/lib/clients";
+import { sendWelcomeEmail } from "@/lib/task-emails";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
@@ -45,6 +47,35 @@ export async function POST(
   const ipAddress = process.env.AGENCY_IP_ADDRESS || "TBD";
   const dnsProvider = (session.dns_provider as string) || "other";
   const formType = resolveFormType(formData);
+
+  // Auto-create client from form submission
+  const autoCreateEmail =
+    (formData.contact_email as string) ||
+    (formData.email as string) ||
+    (session.email as string);
+  if (autoCreateEmail) {
+    try {
+      const existingClient = await getClientByEmail(autoCreateEmail);
+      if (!existingClient) {
+        const contactName = (formData.contact_name as string) || "";
+        const nameParts = contactName.split(" ");
+        const { client, pin } = await createClient({
+          first_name: nameParts[0] || "Client",
+          last_name: nameParts.slice(1).join(" ") || "",
+          company_name: (formData.business_name as string) || "Unknown",
+          email: autoCreateEmail,
+          phone: (formData.contact_phone as string) || (formData.phone as string),
+          website_url: formData.current_website as string,
+          form_session_token: token,
+        });
+        await sendWelcomeEmail(client, pin);
+      } else if (!existingClient.form_session_token) {
+        await updateClient(existingClient.id, { form_session_token: token });
+      }
+    } catch (clientErr) {
+      console.error("[submit] Client auto-creation failed:", clientErr);
+    }
+  }
 
   const resend = getResend();
 

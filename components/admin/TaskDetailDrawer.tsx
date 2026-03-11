@@ -145,6 +145,10 @@ export function TaskDetailDrawer({
   // History
   const [historyOpen, setHistoryOpen] = useState(false);
 
+  // Delete
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   // Upload
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -171,6 +175,8 @@ export function TaskDetailDrawer({
       setHistoryOpen(false);
       setShowAddTime(false);
       setEditingTitle(false);
+      setConfirmingDelete(false);
+      setDeleting(false);
     } else {
       setData(null);
     }
@@ -1024,6 +1030,91 @@ export function TaskDetailDrawer({
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+
+            {/* ─── Delete Task ─── */}
+            <div style={{ padding: "24px 0 0" }}>
+              {!confirmingDelete ? (
+                <button
+                  onClick={() => setConfirmingDelete(true)}
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    letterSpacing: "0.04em",
+                    padding: "8px 16px",
+                    borderRadius: "4px",
+                    border: "1px solid #e8e6df",
+                    cursor: "pointer",
+                    background: "#fff",
+                    color: "#e53935",
+                    width: "100%",
+                  }}
+                >
+                  Delete Task
+                </button>
+              ) : (
+                <div
+                  style={{
+                    border: "1px solid #e53935",
+                    borderRadius: "6px",
+                    padding: "14px",
+                    background: "#fef2f2",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontFamily: "var(--font-sans)",
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      color: "#111110",
+                      margin: "0 0 10px",
+                    }}
+                  >
+                    Are you sure? This will permanently delete this task
+                    {subtasks.length > 0
+                      ? ` and its ${subtasks.length} subtask${subtasks.length > 1 ? "s" : ""}`
+                      : ""}
+                    .
+                  </p>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      disabled={deleting}
+                      onClick={async () => {
+                        setDeleting(true);
+                        try {
+                          const res = await fetch(`/api/admin/tasks/${taskId}`, {
+                            method: "DELETE",
+                          });
+                          if (!res.ok) throw new Error("Failed to delete task");
+                          onUpdated();
+                          onClose();
+                        } catch {
+                          alert("Failed to delete task. Please try again.");
+                          setDeleting(false);
+                        }
+                      }}
+                      style={{
+                        ...smallBtnStyle,
+                        background: "#e53935",
+                        opacity: deleting ? 0.6 : 1,
+                      }}
+                    >
+                      {deleting ? "Deleting..." : "Yes, Delete"}
+                    </button>
+                    <button
+                      onClick={() => setConfirmingDelete(false)}
+                      style={{
+                        ...smallBtnStyle,
+                        background: "#e8e6df",
+                        color: "#111110",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

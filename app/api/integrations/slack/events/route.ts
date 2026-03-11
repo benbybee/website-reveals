@@ -29,14 +29,16 @@ export async function POST(req: NextRequest) {
       const event = body.event;
       const eventId = body.event_id;
 
-      // Only handle message events (not app_mention) to avoid duplicates
+      // Only handle message events (not app_mention) to avoid duplicates.
+      // Trigger on @Ben OR @bot mentions.
+      const mentionsAdmin = process.env.SLACK_ADMIN_USER_ID && event?.text?.includes(`<@${process.env.SLACK_ADMIN_USER_ID}>`);
+      const mentionsBot = process.env.SLACK_BOT_USER_ID && event?.text?.includes(`<@${process.env.SLACK_BOT_USER_ID}>`);
       const isRelevantMessage =
         event?.type === "message" &&
         !event.bot_id &&
         event.subtype !== "bot_message" &&
         event.text &&
-        process.env.SLACK_ADMIN_USER_ID &&
-        event.text.includes(`<@${process.env.SLACK_ADMIN_USER_ID}>`);
+        (mentionsAdmin || mentionsBot);
 
       if (isRelevantMessage) {
         // Process in background so Slack gets an immediate 200 (no retries)

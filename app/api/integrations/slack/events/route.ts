@@ -90,7 +90,17 @@ export async function POST(req: NextRequest) {
             const response = await anthropic.messages.create({
               model: "claude-sonnet-4-20250514",
               max_tokens: 1000,
-              system: `You are an agency intake assistant. Analyze inbound messages from Slack or email, match them to existing clients, and propose tasks. Respond with JSON only, no markdown fences.
+              system: `You are an agency intake assistant for Website Reveals, a web design agency. Analyze inbound Slack messages and determine if a client is requesting work to be done (a task). Respond with JSON only, no markdown fences.
+
+IMPORTANT: Only propose a task if the message is a CLIENT requesting work — e.g. "can you update the homepage", "I need a new landing page", "please fix the contact form". Do NOT propose tasks for:
+- Internal chatter, greetings, or test messages
+- Someone asking a question (not requesting work)
+- Follow-ups, status checks, or general conversation
+- Messages from team members that aren't client requests
+
+If the message is NOT a client task request, set "proposed_task" to null.
+
+Always suggest a response to send back in Slack regardless.
 
 Existing clients:
 ${clientList || "No clients yet."}
@@ -100,15 +110,15 @@ ${activeTaskList || "No active tasks."}`,
               messages: [
                 {
                   role: "user",
-                  content: `Analyze this inbound slack message and extract a task proposal:
+                  content: `Analyze this inbound slack message:
 
 "${text}" (from ${userName} in ${channelName})
 
 Respond with JSON:
 {
   "client_match": { "id": "<client_id>", "name": "<client name>" } | null,
-  "proposed_task": { "title": "<task title>", "description": "<task description>", "priority": "low"|"medium"|"high"|"urgent", "tags": ["<tag>", ...] },
-  "proposed_response": "<suggested reply to the client>"
+  "proposed_task": { "title": "<task title>", "description": "<task description>", "priority": "low"|"medium"|"high"|"urgent", "tags": ["<tag>", ...] } | null,
+  "proposed_response": "<suggested reply to send in Slack>"
 }`,
                 },
               ],
@@ -117,59 +127,83 @@ Respond with JSON:
             const responseText = response.content[0].type === "text" ? response.content[0].text : "";
             const result = JSON.parse(responseText);
 
-            // Store the proposal
-            const { data: proposal, error: proposalError } = await supabase
-              .from("inbound_proposals")
-              .insert({
-                source: "slack",
-                source_metadata: { channel, user, thread_ts: event.thread_ts || event.ts, team: body.team_id, event_id: eventId, message_ts: event.ts },
-                client_id: result.client_match?.id || null,
-                proposed_task: result.proposed_task,
-                proposed_response: result.proposed_response,
-                status: "pending",
-              })
-              .select()
-              .single();
+            // Strip Slack mention markup from original message for readability
+            const cleanText = text.replace(/<@[A-Z0-9]+>/g, "").trim();
+            const hasTask = result.proposed_task !== null;
 
-            if (proposalError) {
-              console.error("[slack-events] Failed to store proposal:", proposalError);
-              return;
+            // Store the proposal (only if there's a task to propose)
+            let proposal: { id: string } | null = null;
+            if (hasTask) {
+              const { data, error: proposalError } = await supabase
+                .from("inbound_proposals")
+                .insert({
+                  source: "slack",
+                  source_metadata: { channel, user, thread_ts: event.thread_ts || event.ts, team: body.team_id, event_id: eventId, message_ts: event.ts },
+                  client_id: result.client_match?.id || null,
+                  proposed_task: result.proposed_task,
+                  proposed_response: result.proposed_response,
+                  status: "pending",
+                })
+                .select()
+                .single();
+
+              if (proposalError) {
+                console.error("[slack-events] Failed to store proposal:", proposalError);
+                return;
+              }
+              proposal = data;
             }
 
-            // Send proposal to Telegram for approval
+            // Send notification to Telegram
             const token = process.env.TELEGRAM_BOT_TOKEN;
             const chatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
-            if (token && chatId && proposal) {
+            if (token && chatId) {
               const clientName = result.client_match ? result.client_match.name : "No matching client";
-              const priorityEmoji = { low: "🟢", medium: "🟡", high: "🟠", urgent: "🔴" }[result.proposed_task.priority as string] || "⚪";
 
-              // Strip Slack mention markup from original message for readability
-              const cleanText = text.replace(/<@[A-Z0-9]+>/g, "").trim();
-
-              const telegramMessage = [
-                `📥 New Proposal from Slack`,
-                ``,
-                `👤 From: ${userName} in ${channelName}`,
+              const lines: string[] = [
+                `📥 Slack message from ${userName} in ${channelName}`,
                 `🏢 Client: ${clientName}`,
                 ``,
-                `💬 Original message:`,
+                `💬 Message:`,
                 `"${cleanText}"`,
-                ``,
-                `📋 Task:`,
-                `• Title: ${result.proposed_task.title}`,
-                `• Priority: ${priorityEmoji} ${result.proposed_task.priority}`,
-                `• Tags: ${result.proposed_task.tags.join(", ")}`,
-                ``,
-                `${result.proposed_task.description}`,
+              ];
+
+              if (hasTask && proposal) {
+                const priorityEmoji = { low: "🟢", medium: "🟡", high: "🟠", urgent: "🔴" }[result.proposed_task.priority as string] || "⚪";
+                lines.push(
+                  ``,
+                  `📋 Proposed Task:`,
+                  `• Title: ${result.proposed_task.title}`,
+                  `• Priority: ${priorityEmoji} ${result.proposed_task.priority}`,
+                  `• Tags: ${result.proposed_task.tags.join(", ")}`,
+                  ``,
+                  `${result.proposed_task.description}`,
+                );
+              }
+
+              lines.push(
                 ``,
                 `✉️ Suggested Response:`,
                 `${result.proposed_response}`,
-                ``,
-                `──────────────`,
-                "💬 Reply in Slack: `reply proposal " + proposal.id + "`",
-                "✅ Approve task: `approve proposal " + proposal.id + "`",
-                "❌ Reject: `reject proposal " + proposal.id + "`",
-              ].join("\n");
+              );
+
+              if (hasTask && proposal) {
+                lines.push(
+                  ``,
+                  `──────────────`,
+                  "💬 Reply in Slack: `reply proposal " + proposal.id + "`",
+                  "✅ Approve task: `approve proposal " + proposal.id + "`",
+                  "❌ Reject: `reject proposal " + proposal.id + "`",
+                );
+              } else if (proposal || !hasTask) {
+                // No task — just offer to reply
+                lines.push(
+                  ``,
+                  `ℹ️ No client task detected.`,
+                );
+              }
+
+              const telegramMessage = lines.join("\n");
 
               // Try with Markdown (for click-to-copy backtick commands), fall back to plain
               let sendRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {

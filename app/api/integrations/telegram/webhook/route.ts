@@ -41,10 +41,39 @@ export async function POST(req: NextRequest) {
     // Process inline instead of via Trigger.dev
     const supabase = createServerClient();
 
-    // Handle approve/reject commands directly (no AI needed)
+    // Handle proposal commands directly (no AI needed)
     const approveMatch = text.match(/approve\s+proposal\s+([0-9a-f-]{36})/i);
     const rejectMatch = text.match(/reject\s+proposal\s+([0-9a-f-]{36})/i);
+    const replyMatch = text.match(/reply\s+proposal\s+([0-9a-f-]{36})/i);
+    const assignMatch = text.match(/assign\s+([0-9a-f-]{36})\s+(\d+)/i);
 
+    // Reply: send the suggested response back in the Slack channel
+    if (replyMatch) {
+      const proposalId = replyMatch[1];
+      const { data: proposal } = await supabase
+        .from("inbound_proposals")
+        .select("proposed_response, source_metadata")
+        .eq("id", proposalId)
+        .single();
+
+      if (!proposal) {
+        await sendTelegram(`Proposal ${proposalId} not found.`, chatId, false);
+        return NextResponse.json({ ok: true });
+      }
+
+      const meta = proposal.source_metadata as Record<string, string>;
+      const { postSlackMessage } = await import("@/lib/slack");
+      try {
+        await postSlackMessage(meta.channel, proposal.proposed_response as string);
+        await sendTelegram(`💬 Reply sent in Slack.`, chatId, false);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await sendTelegram(`Failed to send Slack reply: ${msg}`, chatId, false);
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // Approve: don't create task yet — ask which client
     if (approveMatch) {
       const proposalId = approveMatch[1];
       const { data: proposal } = await supabase
@@ -62,29 +91,103 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
+      // Mark as awaiting client assignment
+      await supabase
+        .from("inbound_proposals")
+        .update({ status: "awaiting_client" })
+        .eq("id", proposalId);
+
+      // Show numbered client list
+      const { data: clients } = await supabase
+        .from("clients")
+        .select("id, first_name, last_name, company_name")
+        .order("company_name");
+
+      const clientLines = (clients || []).map(
+        (c, i) => `${i + 1}. ${c.first_name} ${c.last_name} (${c.company_name})`
+      );
+
       const pt = proposal.proposed_task as Record<string, unknown>;
+      const msg = [
+        `✅ Task approved: "${pt.title}"`,
+        ``,
+        `Which client does this belong to?`,
+        ``,
+        ...clientLines,
+        ``,
+        `Reply with: assign ${proposalId} [number]`,
+      ].join("\n");
+
+      await sendTelegram(msg, chatId, false);
+      return NextResponse.json({ ok: true });
+    }
+
+    // Assign: create the task under the specified client
+    if (assignMatch) {
+      const proposalId = assignMatch[1];
+      const clientIndex = parseInt(assignMatch[2], 10) - 1;
+
+      const { data: proposal } = await supabase
+        .from("inbound_proposals")
+        .select("*")
+        .eq("id", proposalId)
+        .single();
+
+      if (!proposal) {
+        await sendTelegram(`Proposal ${proposalId} not found.`, chatId, false);
+        return NextResponse.json({ ok: true });
+      }
+      if (proposal.status !== "awaiting_client") {
+        await sendTelegram(`Proposal is not awaiting client assignment (status: ${proposal.status}).`, chatId, false);
+        return NextResponse.json({ ok: true });
+      }
+
+      const { data: clients } = await supabase
+        .from("clients")
+        .select("id, first_name, last_name, company_name")
+        .order("company_name");
+
+      if (!clients || clientIndex < 0 || clientIndex >= clients.length) {
+        await sendTelegram(`Invalid client number. Pick 1-${clients?.length || 0}.`, chatId, false);
+        return NextResponse.json({ ok: true });
+      }
+
+      const client = clients[clientIndex];
+      const pt = proposal.proposed_task as Record<string, unknown>;
+
       const { error: taskErr } = await supabase.from("tasks").insert({
-        client_id: proposal.client_id || null,
+        client_id: client.id,
         title: pt.title,
         description: pt.description || null,
         priority: (pt.priority as string) || "medium",
         tags: (pt.tags as string[]) || [],
         status: "backlog",
       });
+
       if (taskErr) {
         console.error("[telegram] Failed to create task:", taskErr);
         await sendTelegram(`Failed to create task: ${taskErr.message}`, chatId, false);
         return NextResponse.json({ ok: true });
       }
+
       await supabase
         .from("inbound_proposals")
-        .update({ status: "approved", resolved_at: new Date().toISOString() })
+        .update({
+          status: "approved",
+          client_id: client.id,
+          resolved_at: new Date().toISOString(),
+        })
         .eq("id", proposalId);
 
-      await sendTelegram(`✅ Approved! Task "${pt.title}" added to backlog.`, chatId, false);
+      await sendTelegram(
+        `✅ Task "${pt.title}" added to backlog for ${client.first_name} ${client.last_name} (${client.company_name}).`,
+        chatId,
+        false
+      );
       return NextResponse.json({ ok: true });
     }
 
+    // Reject
     if (rejectMatch) {
       const proposalId = rejectMatch[1];
       const { data: proposal } = await supabase
@@ -97,7 +200,7 @@ export async function POST(req: NextRequest) {
         await sendTelegram(`Proposal ${proposalId} not found.`, chatId, false);
         return NextResponse.json({ ok: true });
       }
-      if (proposal.status !== "pending") {
+      if (proposal.status !== "pending" && proposal.status !== "awaiting_client") {
         await sendTelegram(`Proposal already ${proposal.status}.`, chatId, false);
         return NextResponse.json({ ok: true });
       }

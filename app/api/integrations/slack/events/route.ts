@@ -164,7 +164,8 @@ Respond with JSON:
                 `${result.proposed_response}`,
                 ``,
                 `──────────────`,
-                `✅ Approve: approve proposal ${proposal.id}`,
+                `💬 Reply in Slack: reply proposal ${proposal.id}`,
+                `✅ Approve task: approve proposal ${proposal.id}`,
                 `❌ Reject: reject proposal ${proposal.id}`,
               ].join("\n");
 

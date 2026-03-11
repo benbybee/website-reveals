@@ -22,6 +22,7 @@ export function ClientDetailDrawer({
   const [resettingPin, setResettingPin] = useState(false);
   const [newPin, setNewPin] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Edit form state
   const [form, setForm] = useState({
@@ -50,6 +51,7 @@ export function ClientDetailDrawer({
     setEditing(false);
     setConfirmDelete(false);
     setNewPin(null);
+    setErrorMsg(null);
   }, [client]);
 
   // Escape to close
@@ -80,7 +82,7 @@ export function ClientDetailDrawer({
       const data = await res.json();
       setNewPin(data.pin);
     } catch {
-      alert("Failed to reset PIN. Please try again.");
+      setErrorMsg("Failed to reset PIN. Please try again.");
     } finally {
       setResettingPin(false);
     }
@@ -107,7 +109,7 @@ export function ClientDetailDrawer({
       onUpdated(updated);
       setEditing(false);
     } catch {
-      alert("Failed to save changes. Please try again.");
+      setErrorMsg("Failed to save changes. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -123,7 +125,7 @@ export function ClientDetailDrawer({
       onDeleted?.(client.id);
       onClose();
     } catch {
-      alert("Failed to delete client. Please try again.");
+      setErrorMsg("Failed to delete client. Please try again.");
       setDeleting(false);
     }
   };
@@ -177,6 +179,63 @@ export function ClientDetailDrawer({
         >
           ✕
         </button>
+
+        {/* Error banner */}
+        {errorMsg && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "10px",
+              background: "#fff5f5",
+              border: "1.5px solid #fecaca",
+              borderRadius: "6px",
+              padding: "10px 14px",
+              marginBottom: "20px",
+            }}
+          >
+            <span
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "12px",
+                fontWeight: 600,
+                color: "#dc2626",
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                flexShrink: 0,
+                paddingTop: "1px",
+              }}
+            >
+              Error
+            </span>
+            <span
+              style={{
+                fontFamily: "var(--font-sans)",
+                fontSize: "13px",
+                color: "#111110",
+                flex: 1,
+                lineHeight: 1.5,
+              }}
+            >
+              {errorMsg}
+            </span>
+            <button
+              onClick={() => setErrorMsg(null)}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#888886",
+                cursor: "pointer",
+                fontSize: "16px",
+                padding: "0 2px",
+                flexShrink: 0,
+                lineHeight: 1,
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Header */}
         <h2

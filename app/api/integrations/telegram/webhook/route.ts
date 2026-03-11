@@ -3,14 +3,24 @@ import { createServerClient } from "@/lib/supabase/server";
 
 export const maxDuration = 60;
 
-async function sendTelegram(text: string, chatId: string) {
+async function sendTelegram(text: string, chatId: string, markdown = true) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) return;
-  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+  const payload: Record<string, string> = { chat_id: chatId, text };
+  if (markdown) payload.parse_mode = "Markdown";
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown" }),
+    body: JSON.stringify(payload),
   });
+  if (!res.ok) {
+    const err = await res.text();
+    console.error("[telegram] Failed to send message:", err);
+    // Retry without markdown if it failed due to formatting
+    if (markdown) {
+      await sendTelegram(text, chatId, false);
+    }
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -44,16 +54,16 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (!proposal) {
-        await sendTelegram(`Proposal ${proposalId} not found.`, chatId);
+        await sendTelegram(`Proposal ${proposalId} not found.`, chatId, false);
         return NextResponse.json({ ok: true });
       }
       if (proposal.status !== "pending") {
-        await sendTelegram(`Proposal already ${proposal.status}.`, chatId);
+        await sendTelegram(`Proposal already ${proposal.status}.`, chatId, false);
         return NextResponse.json({ ok: true });
       }
 
       const pt = proposal.proposed_task as Record<string, unknown>;
-      await supabase.from("tasks").insert({
+      const { error: taskErr } = await supabase.from("tasks").insert({
         client_id: proposal.client_id || null,
         title: pt.title,
         description: pt.description || null,
@@ -61,12 +71,17 @@ export async function POST(req: NextRequest) {
         tags: (pt.tags as string[]) || [],
         status: "backlog",
       });
+      if (taskErr) {
+        console.error("[telegram] Failed to create task:", taskErr);
+        await sendTelegram(`Failed to create task: ${taskErr.message}`, chatId, false);
+        return NextResponse.json({ ok: true });
+      }
       await supabase
         .from("inbound_proposals")
         .update({ status: "approved", resolved_at: new Date().toISOString() })
         .eq("id", proposalId);
 
-      await sendTelegram(`✅ Approved! Task "${pt.title}" added to backlog.`, chatId);
+      await sendTelegram(`✅ Approved! Task "${pt.title}" added to backlog.`, chatId, false);
       return NextResponse.json({ ok: true });
     }
 
@@ -79,11 +94,11 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (!proposal) {
-        await sendTelegram(`Proposal ${proposalId} not found.`, chatId);
+        await sendTelegram(`Proposal ${proposalId} not found.`, chatId, false);
         return NextResponse.json({ ok: true });
       }
       if (proposal.status !== "pending") {
-        await sendTelegram(`Proposal already ${proposal.status}.`, chatId);
+        await sendTelegram(`Proposal already ${proposal.status}.`, chatId, false);
         return NextResponse.json({ ok: true });
       }
 
@@ -93,7 +108,7 @@ export async function POST(req: NextRequest) {
         .eq("id", proposalId);
 
       const pt = proposal.proposed_task as Record<string, unknown>;
-      await sendTelegram(`❌ Rejected proposal: "${pt.title}"`, chatId);
+      await sendTelegram(`❌ Rejected proposal: "${pt.title}"`, chatId, false);
       return NextResponse.json({ ok: true });
     }
 

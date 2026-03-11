@@ -141,32 +141,41 @@ Respond with JSON:
               const clientName = result.client_match ? result.client_match.name : "No matching client";
               const priorityEmoji = { low: "🟢", medium: "🟡", high: "🟠", urgent: "🔴" }[result.proposed_task.priority as string] || "⚪";
 
+              // Strip Slack mention markup from original message for readability
+              const cleanText = text.replace(/<@[A-Z0-9]+>/g, "").trim();
+
               const telegramMessage = [
-                `📥 *New Proposal from Slack*`,
+                `📥 New Proposal from Slack`,
                 ``,
                 `👤 From: ${userName} in ${channelName}`,
                 `🏢 Client: ${clientName}`,
                 ``,
-                `📋 *Task:*`,
+                `💬 Original message:`,
+                `"${cleanText}"`,
+                ``,
+                `📋 Task:`,
                 `• Title: ${result.proposed_task.title}`,
                 `• Priority: ${priorityEmoji} ${result.proposed_task.priority}`,
                 `• Tags: ${result.proposed_task.tags.join(", ")}`,
                 ``,
                 `${result.proposed_task.description}`,
                 ``,
-                `💬 *Suggested Response:*`,
+                `✉️ Suggested Response:`,
                 `${result.proposed_response}`,
                 ``,
                 `──────────────`,
-                `✅ Approve → \`approve proposal ${proposal.id}\``,
-                `❌ Reject → \`reject proposal ${proposal.id}\``,
+                `✅ Approve: approve proposal ${proposal.id}`,
+                `❌ Reject: reject proposal ${proposal.id}`,
               ].join("\n");
 
-              await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+              const sendRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ chat_id: chatId, text: telegramMessage, parse_mode: "Markdown" }),
+                body: JSON.stringify({ chat_id: chatId, text: telegramMessage }),
               });
+              if (!sendRes.ok) {
+                console.error("[slack-events] Telegram send failed:", await sendRes.text());
+              }
             }
           } catch (err) {
             console.error("[slack-events] Background processing error:", err);

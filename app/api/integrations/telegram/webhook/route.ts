@@ -47,12 +47,12 @@ export async function POST(req: NextRequest) {
     const replyMatch = text.match(/reply\s+proposal\s+([0-9a-f-]{36})/i);
     const assignMatch = text.match(/assign\s+([0-9a-f-]{36})\s+(\d+)/i);
 
-    // Reply: send the suggested response back in the Slack channel
+    // Reply: send the suggested response back via the original channel
     if (replyMatch) {
       const proposalId = replyMatch[1];
       const { data: proposal } = await supabase
         .from("inbound_proposals")
-        .select("proposed_response, source_metadata")
+        .select("proposed_response, source, source_metadata")
         .eq("id", proposalId)
         .single();
 
@@ -62,13 +62,32 @@ export async function POST(req: NextRequest) {
       }
 
       const meta = proposal.source_metadata as Record<string, string>;
-      const { postSlackMessage } = await import("@/lib/slack");
+
       try {
-        await postSlackMessage(meta.channel, proposal.proposed_response as string);
-        await sendTelegram(`💬 Reply sent in Slack.`, chatId, false);
+        if (proposal.source === "email") {
+          // Reply via email using Resend
+          const { Resend } = await import("resend");
+          const resend = new Resend(process.env.RESEND_API_KEY);
+          const replyTo = meta.original_sender || meta.from;
+          const reSubject = meta.subject
+            ? (meta.subject.startsWith("Re:") ? meta.subject : `Re: ${meta.subject}`)
+            : "Re: Your request";
+          await resend.emails.send({
+            from: "Website Reveals <creativemarketing@websitereveals.com>",
+            to: [replyTo],
+            subject: reSubject,
+            text: proposal.proposed_response as string,
+          });
+          await sendTelegram(`💬 Email reply sent to ${replyTo}.`, chatId, false);
+        } else {
+          // Reply via Slack
+          const { postSlackMessage } = await import("@/lib/slack");
+          await postSlackMessage(meta.channel, proposal.proposed_response as string);
+          await sendTelegram(`💬 Reply sent in Slack.`, chatId, false);
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        await sendTelegram(`Failed to send Slack reply: ${msg}`, chatId, false);
+        await sendTelegram(`Failed to send reply: ${msg}`, chatId, false);
       }
       return NextResponse.json({ ok: true });
     }

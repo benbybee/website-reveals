@@ -48,7 +48,8 @@ export async function POST(req: NextRequest) {
     console.log("[email-inbound] Processing email, content length:", content.length);
 
     const message = subject ? `Subject: ${subject}\n\n${content}` : content;
-    const sourceMetadata = {
+    // sourceMetadata will be updated with original_sender after AI analysis
+    let sourceMetadata: Record<string, unknown> = {
       from,
       to: toAddresses,
       subject,
@@ -89,14 +90,16 @@ export async function POST(req: NextRequest) {
       max_tokens: 1000,
       system: `You are an agency intake assistant for Website Reveals, a web design agency. Analyze inbound emails and determine if a client is requesting work to be done (a task). Respond with JSON only, no markdown fences.
 
-IMPORTANT: Only propose a task if the message is a CLIENT requesting work. Do NOT propose tasks for:
+IMPORTANT CONTEXT: These emails are FORWARDED by the agency owner (Ben) from his personal email. The "From" address is Ben's email, NOT the client's. Look inside the email body for forwarded message headers like "From:", "---------- Forwarded message ----------", or similar patterns to identify the ACTUAL client who sent the original message. Match that person's name/email against the client list.
+
+Only propose a task if the message contains a CLIENT requesting work — e.g. "can you update the homepage", "I need a new landing page", "please fix the contact form". Do NOT propose tasks for:
 - Internal chatter, greetings, or test messages
 - Someone asking a question (not requesting work)
 - Follow-ups, status checks, or general conversation
 
 If the message is NOT a client task request, set "proposed_task" to null.
 
-Always suggest a response to send back regardless.
+Always suggest a response to send back to the client regardless.
 
 Existing clients:
 ${clientList || "No clients yet."}
@@ -106,16 +109,17 @@ ${activeTaskList || "No active tasks."}`,
       messages: [
         {
           role: "user",
-          content: `Analyze this inbound email:
+          content: `Analyze this inbound email (likely forwarded by agency owner):
 
-From: ${from}
+Forwarded by: ${from}
 ${message}
 
 Respond with JSON:
 {
   "client_match": { "id": "<client_id>", "name": "<client name>" } | null,
+  "original_sender": "<name and/or email of the actual client from the forwarded content, or null if not found>",
   "proposed_task": { "title": "<task title>", "description": "<task description>", "priority": "low"|"medium"|"high"|"urgent", "tags": ["<tag>", ...] } | null,
-  "proposed_response": "<suggested reply to the client>"
+  "proposed_response": "<suggested reply to send to the client>"
 }`,
         },
       ],
@@ -126,7 +130,10 @@ Respond with JSON:
     const result = JSON.parse(responseText);
     const hasTask = result.proposed_task !== null;
 
-    console.log("[email-inbound] AI result - hasTask:", hasTask, "client:", result.client_match?.name);
+    console.log("[email-inbound] AI result - hasTask:", hasTask, "client:", result.client_match?.name, "originalSender:", result.original_sender);
+
+    // Add original sender to metadata for reply handling
+    sourceMetadata.original_sender = result.original_sender || null;
 
     // Store proposal (only if there's a task)
     let proposal: { id: string } | null = null;
@@ -159,8 +166,10 @@ Respond with JSON:
         ? result.client_match.name
         : "No matching client";
 
+      const originalSender = result.original_sender || from;
+
       const lines: string[] = [
-        `📧 Email from ${from}`,
+        `📧 Email from ${originalSender}`,
         `🏢 Client: ${clientName}`,
         ``,
         `📋 Subject: ${subject || "(no subject)"}`,
@@ -188,6 +197,7 @@ Respond with JSON:
         lines.push(
           ``,
           `──────────────`,
+          "💬 Reply to client: `reply proposal " + proposal.id + "`",
           "✅ Approve task: `approve proposal " + proposal.id + "`",
           "❌ Reject: `reject proposal " + proposal.id + "`"
         );

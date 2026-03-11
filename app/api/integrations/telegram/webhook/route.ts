@@ -31,6 +31,72 @@ export async function POST(req: NextRequest) {
     // Process inline instead of via Trigger.dev
     const supabase = createServerClient();
 
+    // Handle approve/reject commands directly (no AI needed)
+    const approveMatch = text.match(/approve\s+proposal\s+([0-9a-f-]{36})/i);
+    const rejectMatch = text.match(/reject\s+proposal\s+([0-9a-f-]{36})/i);
+
+    if (approveMatch) {
+      const proposalId = approveMatch[1];
+      const { data: proposal } = await supabase
+        .from("inbound_proposals")
+        .select("*")
+        .eq("id", proposalId)
+        .single();
+
+      if (!proposal) {
+        await sendTelegram(`Proposal ${proposalId} not found.`, chatId);
+        return NextResponse.json({ ok: true });
+      }
+      if (proposal.status !== "pending") {
+        await sendTelegram(`Proposal already ${proposal.status}.`, chatId);
+        return NextResponse.json({ ok: true });
+      }
+
+      const pt = proposal.proposed_task as Record<string, unknown>;
+      await supabase.from("tasks").insert({
+        client_id: proposal.client_id || null,
+        title: pt.title,
+        description: pt.description || null,
+        priority: (pt.priority as string) || "medium",
+        tags: (pt.tags as string[]) || [],
+        status: "backlog",
+      });
+      await supabase
+        .from("inbound_proposals")
+        .update({ status: "approved", resolved_at: new Date().toISOString() })
+        .eq("id", proposalId);
+
+      await sendTelegram(`✅ Approved! Task "${pt.title}" added to backlog.`, chatId);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (rejectMatch) {
+      const proposalId = rejectMatch[1];
+      const { data: proposal } = await supabase
+        .from("inbound_proposals")
+        .select("id, status, proposed_task")
+        .eq("id", proposalId)
+        .single();
+
+      if (!proposal) {
+        await sendTelegram(`Proposal ${proposalId} not found.`, chatId);
+        return NextResponse.json({ ok: true });
+      }
+      if (proposal.status !== "pending") {
+        await sendTelegram(`Proposal already ${proposal.status}.`, chatId);
+        return NextResponse.json({ ok: true });
+      }
+
+      await supabase
+        .from("inbound_proposals")
+        .update({ status: "rejected", resolved_at: new Date().toISOString() })
+        .eq("id", proposalId);
+
+      const pt = proposal.proposed_task as Record<string, unknown>;
+      await sendTelegram(`❌ Rejected proposal: "${pt.title}"`, chatId);
+      return NextResponse.json({ ok: true });
+    }
+
     // Fetch conversation history
     const { data: history } = await supabase
       .from("telegram_conversations")

@@ -47,17 +47,23 @@ export async function POST(req: NextRequest) {
       }));
 
     // Fetch context
-    const [clientsRes, tasksRes] = await Promise.all([
+    const [clientsRes, tasksRes, proposalsRes] = await Promise.all([
       supabase.from("clients").select("*").order("company_name"),
       supabase
         .from("tasks")
         .select("*")
         .in("status", ["backlog", "in_progress", "blocked"])
         .order("created_at", { ascending: false }),
+      supabase
+        .from("inbound_proposals")
+        .select("*")
+        .eq("status", "pending")
+        .order("created_at", { ascending: false }),
     ]);
 
     const clients = (clientsRes.data || []) as Record<string, unknown>[];
     const activeTasks = (tasksRes.data || []) as Record<string, unknown>[];
+    const pendingProposals = (proposalsRes.data || []) as Record<string, unknown>[];
 
     const clientList = clients
       .map(
@@ -69,8 +75,15 @@ export async function POST(req: NextRequest) {
     const taskList = activeTasks
       .map(
         (t) =>
-          `- [${(t.id as string).slice(0, 8)}] ${t.title} — ${t.status} (Client: ${(t.client_id as string).slice(0, 8)})`
+          `- [${(t.id as string).slice(0, 8)}] ${t.title} — ${t.status} (Client: ${(t.client_id as string)?.slice(0, 8) || "none"})`
       )
+      .join("\n");
+
+    const proposalList = pendingProposals
+      .map((p) => {
+        const pt = p.proposed_task as Record<string, unknown>;
+        return `- [${p.id}] "${pt.title}" — Source: ${p.source}, Client: ${p.client_id || "none"}`;
+      })
       .join("\n");
 
     const systemPrompt = `You are Ben's AI assistant for managing client tasks at Website Reveals. You communicate via Telegram.
@@ -88,6 +101,9 @@ ${clientList || "No clients yet."}
 
 ACTIVE TASKS:
 ${taskList || "No active tasks."}
+
+PENDING PROPOSALS (awaiting your approval/rejection):
+${proposalList || "No pending proposals."}
 
 Respond with JSON only, no markdown fences:
 {
@@ -206,10 +222,10 @@ For reject_proposal: data = { "proposal_id": "..." }`;
             .select("*")
             .eq("id", d.proposal_id)
             .single();
-          if (proposal && proposal.client_id) {
+          if (proposal) {
             const pt = proposal.proposed_task as Record<string, unknown>;
             await supabase.from("tasks").insert({
-              client_id: proposal.client_id,
+              client_id: proposal.client_id || null,
               title: pt.title,
               description: pt.description || null,
               priority: (pt.priority as string) || "medium",

@@ -26,12 +26,48 @@ export async function POST(req: NextRequest) {
     // Handle event callbacks
     if (body.type === "event_callback") {
       const event = body.event;
+      const eventId = body.event_id;
 
-      if (event?.type === "app_mention") {
+      // Only handle message events (not app_mention) to avoid duplicates.
+      // A single Slack message fires both app_mention and message events
+      // simultaneously, causing a race condition that dedup can't catch.
+      // message events cover both @bot and @Ben mentions.
+      const isRelevantMessage =
+        event?.type === "message" &&
+        !event.bot_id &&
+        event.subtype !== "bot_message" &&
+        event.text &&
+        process.env.SLACK_ADMIN_USER_ID &&
+        event.text.includes(`<@${process.env.SLACK_ADMIN_USER_ID}>`);
+
+      if (isRelevantMessage) {
         const { text, user, channel } = event;
-
-        // Process inline instead of via Trigger.dev
         const supabase = createServerClient();
+
+        // Deduplicate on message timestamp + channel (not event_id, since
+        // a single message can fire both app_mention and message events
+        // with different event_ids)
+        const messageTs = event.ts;
+        if (messageTs) {
+          const { data: existing } = await supabase
+            .from("inbound_proposals")
+            .select("id")
+            .eq("source", "slack")
+            .filter("source_metadata->>message_ts", "eq", messageTs)
+            .filter("source_metadata->>channel", "eq", channel)
+            .limit(1);
+
+          if (existing && existing.length > 0) {
+            return NextResponse.json({ ok: true });
+          }
+        }
+
+        // Resolve user and channel names from Slack API
+        const { getSlackUserName, getSlackChannelName } = await import("@/lib/slack");
+        const [userName, channelName] = await Promise.all([
+          getSlackUserName(user),
+          getSlackChannelName(channel),
+        ]);
 
         const [clientsRes, tasksRes] = await Promise.all([
           supabase.from("clients").select("*").order("created_at", { ascending: false }),
@@ -65,7 +101,7 @@ ${activeTaskList || "No active tasks."}`,
               role: "user",
               content: `Analyze this inbound slack message and extract a task proposal:
 
-"${text}" (from Slack user <@${user}> in channel ${channel})
+"${text}" (from ${userName} in ${channelName})
 
 Respond with JSON:
 {
@@ -80,12 +116,12 @@ Respond with JSON:
         const responseText = response.content[0].type === "text" ? response.content[0].text : "";
         const result = JSON.parse(responseText);
 
-        // Store the proposal
+        // Store the proposal with event_id for deduplication
         const { data: proposal, error: proposalError } = await supabase
           .from("inbound_proposals")
           .insert({
             source: "slack",
-            source_metadata: { channel, user, thread_ts: event.thread_ts || event.ts, team: body.team_id },
+            source_metadata: { channel, user, thread_ts: event.thread_ts || event.ts, team: body.team_id, event_id: eventId, message_ts: event.ts },
             client_id: result.client_match?.id || null,
             proposed_task: result.proposed_task,
             proposed_response: result.proposed_response,
@@ -102,8 +138,30 @@ Respond with JSON:
         const token = process.env.TELEGRAM_BOT_TOKEN;
         const chatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
         if (token && chatId && proposal) {
-          const clientName = result.client_match ? result.client_match.name : "Unknown client";
-          const telegramMessage = `*New Inbound Proposal (Slack)*\nClient: ${clientName}\n\n*Proposed Task:*\nTitle: ${result.proposed_task.title}\nPriority: ${result.proposed_task.priority}\nTags: ${result.proposed_task.tags.join(", ")}\n\n${result.proposed_task.description}\n\n*Proposed Response:*\n${result.proposed_response}\n\nTo approve: "approve proposal ${proposal.id}"\nTo reject: "reject proposal ${proposal.id}"`;
+          const clientName = result.client_match ? result.client_match.name : "No matching client";
+          const priorityEmoji = { low: "🟢", medium: "🟡", high: "🟠", urgent: "🔴" }[result.proposed_task.priority as string] || "⚪";
+
+          const telegramMessage = [
+            `📥 *New Proposal from Slack*`,
+            ``,
+            `👤 From: ${userName} in ${channelName}`,
+            `🏢 Client: ${clientName}`,
+            ``,
+            `📋 *Task:*`,
+            `• Title: ${result.proposed_task.title}`,
+            `• Priority: ${priorityEmoji} ${result.proposed_task.priority}`,
+            `• Tags: ${result.proposed_task.tags.join(", ")}`,
+            ``,
+            `${result.proposed_task.description}`,
+            ``,
+            `💬 *Suggested Response:*`,
+            `${result.proposed_response}`,
+            ``,
+            `──────────────`,
+            `✅ Approve → \`approve proposal ${proposal.id}\``,
+            `❌ Reject → \`reject proposal ${proposal.id}\``,
+          ].join("\n");
+
           await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

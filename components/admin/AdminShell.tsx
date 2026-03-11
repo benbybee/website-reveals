@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { FormSession } from "@/lib/supabase/types";
 import type { Client, TaskWithClient } from "@/lib/types/client-tasks";
+import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
 import { SubmissionsTable } from "./SubmissionsTable";
 import { ClientsPanel } from "./ClientsPanel";
 import { ClientDetailDrawer } from "./ClientDetailDrawer";
@@ -19,7 +20,7 @@ const TABS: { key: Tab; label: string }[] = [
 ];
 
 export function AdminShell({
-  sessions,
+  sessions: initialSessions,
   clients: initialClients,
   tasks: initialTasks,
   userEmail,
@@ -30,6 +31,7 @@ export function AdminShell({
   userEmail: string;
 }) {
   const [activeTab, setActiveTab] = useState<Tab>("submissions");
+  const [sessions, setSessions] = useState(initialSessions);
   const [clients, setClients] = useState(initialClients);
   const [tasks, setTasks] = useState(initialTasks);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
@@ -39,7 +41,17 @@ export function AdminShell({
     string | undefined
   >();
 
-  const refreshTasks = async () => {
+  const refreshSessions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/submissions");
+      if (res.ok) {
+        const data = await res.json();
+        setSessions(data.sessions);
+      }
+    } catch {}
+  }, []);
+
+  const refreshTasks = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/tasks");
       if (res.ok) {
@@ -47,9 +59,9 @@ export function AdminShell({
         setTasks(data.tasks);
       }
     } catch {}
-  };
+  }, []);
 
-  const refreshClients = async () => {
+  const refreshClients = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/clients");
       if (res.ok) {
@@ -57,7 +69,14 @@ export function AdminShell({
         setClients(data.clients);
       }
     } catch {}
-  };
+  }, []);
+
+  // Subscribe to Supabase Realtime for live updates
+  useRealtimeRefresh([
+    { table: "form_sessions", onChange: refreshSessions },
+    { table: "clients", onChange: refreshClients },
+    { table: "tasks", onChange: refreshTasks },
+  ]);
 
   return (
     <>
@@ -198,6 +217,11 @@ export function AdminShell({
             prev.map((c) => (c.id === updated.id ? updated : c))
           );
           setSelectedClient(updated);
+        }}
+        onDeleted={(id) => {
+          setClients((prev) => prev.filter((c) => c.id !== id));
+          setSelectedClient(null);
+          refreshTasks();
         }}
       />
 

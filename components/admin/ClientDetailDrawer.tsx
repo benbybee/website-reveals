@@ -7,12 +7,14 @@ interface ClientDetailDrawerProps {
   client: Client | null;
   onClose: () => void;
   onUpdated: (client: Client) => void;
+  onDeleted?: (id: string) => void;
 }
 
 export function ClientDetailDrawer({
   client,
   onClose,
   onUpdated,
+  onDeleted,
 }: ClientDetailDrawerProps) {
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -118,6 +120,7 @@ export function ClientDetailDrawer({
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Failed to delete client");
+      onDeleted?.(client.id);
       onClose();
     } catch {
       alert("Failed to delete client. Please try again.");

@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { tasks } from "@trigger.dev/sdk/v3";
 
 export async function POST(req: NextRequest) {
   try {
     const rawBody = await req.text();
     const body = JSON.parse(rawBody);
 
-    // Slack URL verification challenge
-    if (body.type === "url_verification") {
+    // Slack URL verification challenge — must respond immediately
+    if (body.type === "url_verification" && body.challenge) {
       return NextResponse.json({ challenge: body.challenge });
     }
 
@@ -27,6 +26,7 @@ export async function POST(req: NextRequest) {
 
       if (event?.type === "app_mention") {
         const { text, user, channel } = event;
+        const { tasks } = await import("@trigger.dev/sdk/v3");
 
         await tasks.trigger("ai-process-inbound", {
           content: text,

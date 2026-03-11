@@ -63,9 +63,8 @@ export default async function PortalTasksPage() {
         <h1
           style={{
             fontSize: "20px",
-            fontFamily:
-              "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
-            color: "#e8e6df",
+            fontFamily: "var(--font-mono)",
+            color: "#111110",
             fontWeight: 400,
             margin: "0 0 24px 0",
             textTransform: "uppercase",
@@ -103,9 +102,8 @@ export default async function PortalTasksPage() {
       <h1
         style={{
           fontSize: "20px",
-          fontFamily:
-            "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
-          color: "#e8e6df",
+          fontFamily: "var(--font-mono)",
+          color: "#111110",
           fontWeight: 400,
           margin: "0 0 24px 0",
           textTransform: "uppercase",
@@ -148,8 +146,7 @@ export default async function PortalTasksPage() {
               <span
                 style={{
                   fontSize: "14px",
-                  fontFamily:
-                    "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+                  fontFamily: "var(--font-mono)",
                   textTransform: "uppercase",
                   color: config.color,
                   letterSpacing: "0.04em",
@@ -160,8 +157,7 @@ export default async function PortalTasksPage() {
               <span
                 style={{
                   fontSize: "11px",
-                  fontFamily:
-                    "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+                  fontFamily: "var(--font-mono)",
                   color: config.color,
                   backgroundColor: `${config.color}18`,
                   padding: "2px 8px",

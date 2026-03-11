@@ -23,14 +23,14 @@ interface TaskCardProps {
 }
 
 const PRIORITY_COLORS: Record<string, { bg: string; text: string }> = {
-  low: { bg: "#888886", text: "#e8e6df" },
+  low: { bg: "#c8c6be", text: "#111110" },
   medium: { bg: "#2196f3", text: "#fff" },
   high: { bg: "#ff6b35", text: "#fff" },
   urgent: { bg: "#ff3d00", text: "#fff" },
 };
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  backlog: { bg: "#555", text: "#e8e6df" },
+  backlog: { bg: "#c8c6be", text: "#111110" },
   in_progress: { bg: "#2196f3", text: "#fff" },
   blocked: { bg: "#ff6b35", text: "#fff" },
   complete: { bg: "#4caf50", text: "#fff" },
@@ -121,8 +121,8 @@ export default function TaskCard({ task }: TaskCardProps) {
   return (
     <div
       style={{
-        background: "#1a1a19",
-        border: "1px solid #333",
+        background: "#ffffff",
+        border: "1px solid #e8e6df",
         borderRadius: 6,
         padding: 16,
         marginBottom: 8,
@@ -131,15 +131,15 @@ export default function TaskCard({ task }: TaskCardProps) {
       }}
       onClick={handleToggle}
       onMouseEnter={(e) => {
-        (e.currentTarget as HTMLDivElement).style.borderColor = "#555";
+        (e.currentTarget as HTMLDivElement).style.borderColor = "#c8c6be";
       }}
       onMouseLeave={(e) => {
-        (e.currentTarget as HTMLDivElement).style.borderColor = "#333";
+        (e.currentTarget as HTMLDivElement).style.borderColor = "#e8e6df";
       }}
     >
       {/* Collapsed: top row */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 16, color: "#e8e6df", fontWeight: 500 }}>{task.title}</span>
+        <span style={{ fontSize: 16, color: "#111110", fontWeight: 500 }}>{task.title}</span>
         <span
           style={{
             fontSize: 10,
@@ -186,7 +186,7 @@ export default function TaskCard({ task }: TaskCardProps) {
             key={tag}
             style={{
               fontSize: 10,
-              background: "#2a2a29",
+              background: "#f4f3ee",
               color: "#888886",
               padding: "2px 6px",
               borderRadius: 2,
@@ -220,7 +220,7 @@ export default function TaskCard({ task }: TaskCardProps) {
             style={{ overflow: "hidden" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ paddingTop: 16, marginTop: 16, borderTop: "1px solid #333" }}>
+            <div style={{ paddingTop: 16, marginTop: 16, borderTop: "1px solid #e8e6df" }}>
               {/* Description */}
               {task.description && (
                 <p
@@ -246,7 +246,6 @@ export default function TaskCard({ task }: TaskCardProps) {
               {/* Subtask list */}
               {task.subtask_count > 0 && (
                 <div style={{ margin: "0 0 12px 0" }}>
-                  {/* Subtask summary when no detailed list is available */}
                   <p style={{ fontSize: 13, color: "#888886", margin: 0 }}>
                     Subtasks: {task.subtasks_completed} of {task.subtask_count} complete
                   </p>
@@ -289,7 +288,7 @@ export default function TaskCard({ task }: TaskCardProps) {
                         >
                           {att.name}
                         </a>
-                        <span style={{ fontSize: 11, color: "#666", marginLeft: 6 }}>
+                        <span style={{ fontSize: 11, color: "#c8c6be", marginLeft: 6 }}>
                           ({att.type})
                         </span>
                       </li>
@@ -312,9 +311,9 @@ export default function TaskCard({ task }: TaskCardProps) {
                 </p>
 
                 {loadingComments ? (
-                  <p style={{ fontSize: 13, color: "#666" }}>Loading comments...</p>
+                  <p style={{ fontSize: 13, color: "#c8c6be" }}>Loading comments...</p>
                 ) : comments.length === 0 ? (
-                  <p style={{ fontSize: 13, color: "#666" }}>No comments yet.</p>
+                  <p style={{ fontSize: 13, color: "#c8c6be" }}>No comments yet.</p>
                 ) : (
                   <div
                     style={{
@@ -345,19 +344,19 @@ export default function TaskCard({ task }: TaskCardProps) {
                               fontSize: 12,
                               fontFamily: "monospace",
                               fontWeight: 700,
-                              color: "#e8e6df",
+                              color: "#111110",
                             }}
                           >
                             {comment.author_name}
                           </span>
-                          <span style={{ fontSize: 12, color: "#666" }}>
+                          <span style={{ fontSize: 12, color: "#c8c6be" }}>
                             {formatTimestamp(comment.created_at)}
                           </span>
                         </div>
                         <p
                           style={{
                             fontSize: 14,
-                            color: "#e8e6df",
+                            color: "#111110",
                             margin: 0,
                             lineHeight: 1.5,
                             whiteSpace: "pre-wrap",
@@ -379,11 +378,11 @@ export default function TaskCard({ task }: TaskCardProps) {
                   style={{
                     width: "100%",
                     minHeight: 80,
-                    background: "#111110",
-                    border: "1px solid #333",
+                    background: "#f4f3ee",
+                    border: "1px solid #e8e6df",
                     borderRadius: 4,
                     padding: 12,
-                    color: "#e8e6df",
+                    color: "#111110",
                     fontSize: 14,
                     resize: "vertical",
                     fontFamily: "inherit",
@@ -391,10 +390,10 @@ export default function TaskCard({ task }: TaskCardProps) {
                     outline: "none",
                   }}
                   onFocus={(e) => {
-                    (e.currentTarget as HTMLTextAreaElement).style.borderColor = "#555";
+                    (e.currentTarget as HTMLTextAreaElement).style.borderColor = "#c8c6be";
                   }}
                   onBlur={(e) => {
-                    (e.currentTarget as HTMLTextAreaElement).style.borderColor = "#333";
+                    (e.currentTarget as HTMLTextAreaElement).style.borderColor = "#e8e6df";
                   }}
                 />
 
@@ -433,7 +432,7 @@ export default function TaskCard({ task }: TaskCardProps) {
                     }}
                     disabled={posting || !commentContent.trim()}
                     style={{
-                      background: posting || !commentContent.trim() ? "#662200" : "#ff3d00",
+                      background: posting || !commentContent.trim() ? "#ffb399" : "#ff3d00",
                       color: "#fff",
                       border: "none",
                       borderRadius: 4,

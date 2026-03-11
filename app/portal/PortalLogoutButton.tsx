@@ -24,7 +24,7 @@ export function PortalLogoutButton() {
       disabled={loading}
       style={{
         background: "transparent",
-        border: "1px solid #555",
+        border: "1px solid #e8e6df",
         color: "#888886",
         fontSize: "12px",
         padding: "5px 12px",

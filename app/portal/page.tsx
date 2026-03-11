@@ -35,8 +35,8 @@ export default async function PortalDashboard() {
       <h1
         style={{
           fontSize: "28px",
-          fontFamily: "Georgia, 'Times New Roman', serif",
-          color: "#e8e6df",
+          fontFamily: "var(--font-serif)",
+          color: "#111110",
           fontWeight: 400,
           margin: "0 0 4px 0",
         }}
@@ -66,8 +66,8 @@ export default async function PortalDashboard() {
             <div
               key={status}
               style={{
-                backgroundColor: "#1a1a19",
-                border: "1px solid #333",
+                backgroundColor: "#ffffff",
+                border: "1px solid #e8e6df",
                 borderRadius: "6px",
                 padding: "20px",
               }}
@@ -75,8 +75,7 @@ export default async function PortalDashboard() {
               <div
                 style={{
                   fontSize: "11px",
-                  fontFamily:
-                    "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+                  fontFamily: "var(--font-mono)",
                   textTransform: "uppercase",
                   color: config.color,
                   letterSpacing: "0.04em",
@@ -89,7 +88,7 @@ export default async function PortalDashboard() {
                 style={{
                   fontSize: "36px",
                   fontWeight: 700,
-                  color: "#e8e6df",
+                  color: "#111110",
                   lineHeight: 1,
                 }}
               >

@@ -21,9 +21,9 @@ export default async function PortalLayout({
   return (
     <div
       style={{
-        backgroundColor: "#111110",
+        backgroundColor: "#faf9f5",
         minHeight: "100vh",
-        color: "#e8e6df",
+        color: "#111110",
       }}
     >
       {session && (
@@ -34,7 +34,7 @@ export default async function PortalLayout({
               alignItems: "center",
               justifyContent: "space-between",
               padding: "16px 24px",
-              borderBottom: "1px solid #333",
+              borderBottom: "1px solid #e8e6df",
             }}
           >
             <Link
@@ -56,7 +56,7 @@ export default async function PortalLayout({
               {clientName && (
                 <span
                   style={{
-                    color: "#e8e6df",
+                    color: "#111110",
                     fontSize: "13px",
                     fontFamily:
                       "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
@@ -73,7 +73,7 @@ export default async function PortalLayout({
               display: "flex",
               gap: "0",
               padding: "0 24px",
-              borderBottom: "1px solid #333",
+              borderBottom: "1px solid #e8e6df",
             }}
           >
             <Link
@@ -84,7 +84,7 @@ export default async function PortalLayout({
                 fontFamily:
                   "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
                 textTransform: "uppercase",
-                color: "#e8e6df",
+                color: "#111110",
                 textDecoration: "none",
                 borderBottom: "2px solid transparent",
                 letterSpacing: "0.04em",
@@ -100,7 +100,7 @@ export default async function PortalLayout({
                 fontFamily:
                   "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
                 textTransform: "uppercase",
-                color: "#e8e6df",
+                color: "#111110",
                 textDecoration: "none",
                 borderBottom: "2px solid transparent",
                 letterSpacing: "0.04em",

@@ -8,6 +8,7 @@ export interface Client {
   website_url: string | null;
   github_repo_url: string | null;
   pin_hash: string;
+  pin: string | null;
   form_session_token: string | null;
   created_at: string;
   updated_at: string;

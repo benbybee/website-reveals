@@ -9,6 +9,7 @@ import { FORM_STEPS } from "@/lib/form-steps";
 import { escapeHtml } from "@/lib/sanitize";
 import { getClientByEmail, createClient, updateClient } from "@/lib/clients";
 import { sendWelcomeEmail } from "@/lib/task-emails";
+import { sendTelegramMessage } from "@/lib/telegram";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
@@ -57,7 +58,7 @@ export async function POST(
     try {
       const existingClient = await getClientByEmail(autoCreateEmail);
       if (!existingClient) {
-        const contactName = (formData.contact_name as string) || "";
+        const contactName = (formData.contact_person as string) || (formData.contact_name as string) || "";
         const nameParts = contactName.split(" ");
         const { client, pin } = await createClient({
           first_name: nameParts[0] || "Client",
@@ -145,6 +146,15 @@ export async function POST(
   } catch (buildErr) {
     // Log but don't fail the submission — emails already sent
     console.error("[build] Failed to queue build job:", buildErr);
+  }
+
+  // Notify admin via Telegram
+  try {
+    const contactEmail = (formData.contact_email as string) || (formData.email as string) || "";
+    const telegramMsg = `*New Form Submission*\nBusiness: ${businessName}\nForm type: ${formType}\nEmail: ${contactEmail}\nDNS: ${dnsProvider}`;
+    await sendTelegramMessage(telegramMsg);
+  } catch (tgErr) {
+    console.error("[submit] Telegram notification failed:", tgErr);
   }
 
   return NextResponse.json({ ok: true });

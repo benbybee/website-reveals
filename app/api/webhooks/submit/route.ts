@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
     try {
       const existingClient = await getClientByEmail(webhookClientEmail);
       if (!existingClient) {
-        const contactName = (form_data.contact_name as string) || "";
+        const contactName = (form_data.contact_person as string) || (form_data.contact_name as string) || "";
         const nameParts = contactName.split(" ");
         const { client, pin } = await createClient({
           first_name: nameParts[0] || "Client",

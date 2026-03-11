@@ -71,7 +71,7 @@ export default function TaskCard({ task }: TaskCardProps) {
       const res = await fetch(`/api/portal/tasks/${task.id}/comments`);
       if (res.ok) {
         const data = await res.json();
-        setComments(data);
+        setComments(data.comments || data);
       }
     } catch {
       // silently fail

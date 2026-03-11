@@ -23,6 +23,7 @@ export async function createClient(data: {
       last_name: data.last_name,
       company_name: data.company_name,
       pin_hash,
+      pin,
       email: data.email.toLowerCase(),
       phone: data.phone || null,
       website_url: data.website_url || null,
@@ -96,7 +97,7 @@ export async function resetClientPin(id: string): Promise<string> {
 
   const { error } = await supabase
     .from("clients")
-    .update({ pin_hash, updated_at: new Date().toISOString() })
+    .update({ pin_hash, pin, updated_at: new Date().toISOString() })
     .eq("id", id);
 
   if (error) throw new Error(`Failed to reset PIN: ${error.message}`);

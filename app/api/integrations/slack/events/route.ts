@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@/lib/supabase/server";
+
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,19 +29,87 @@ export async function POST(req: NextRequest) {
 
       if (event?.type === "app_mention") {
         const { text, user, channel } = event;
-        const { tasks } = await import("@trigger.dev/sdk/v3");
 
-        await tasks.trigger("ai-process-inbound", {
-          content: text,
-          sender: `Slack user <@${user}>`,
-          source: "slack",
-          metadata: {
-            channel,
-            user,
-            thread_ts: event.thread_ts || event.ts,
-            team: body.team_id,
-          },
+        // Process inline instead of via Trigger.dev
+        const supabase = createServerClient();
+
+        const [clientsRes, tasksRes] = await Promise.all([
+          supabase.from("clients").select("*").order("created_at", { ascending: false }),
+          supabase.from("tasks").select("*").in("status", ["backlog", "in_progress", "blocked"]).order("created_at", { ascending: false }),
+        ]);
+
+        const clients = (clientsRes.data || []) as Record<string, unknown>[];
+        const activeTasks = (tasksRes.data || []) as Record<string, unknown>[];
+
+        const clientList = clients
+          .map((c) => `ID: ${c.id}, Name: ${c.first_name} ${c.last_name}, Company: ${c.company_name}, Email: ${c.email}`)
+          .join("\n");
+        const activeTaskList = activeTasks
+          .map((t) => `ID: ${t.id}, Client: ${t.client_id}, Title: ${t.title}, Status: ${t.status}`)
+          .join("\n");
+
+        const { default: Anthropic } = await import("@anthropic-ai/sdk");
+        const anthropic = new Anthropic();
+        const response = await anthropic.messages.create({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          system: `You are an agency intake assistant. Analyze inbound messages from Slack or email, match them to existing clients, and propose tasks. Respond with JSON only, no markdown fences.
+
+Existing clients:
+${clientList || "No clients yet."}
+
+Active tasks:
+${activeTaskList || "No active tasks."}`,
+          messages: [
+            {
+              role: "user",
+              content: `Analyze this inbound slack message and extract a task proposal:
+
+"${text}" (from Slack user <@${user}> in channel ${channel})
+
+Respond with JSON:
+{
+  "client_match": { "id": "<client_id>", "name": "<client name>" } | null,
+  "proposed_task": { "title": "<task title>", "description": "<task description>", "priority": "low"|"medium"|"high"|"urgent", "tags": ["<tag>", ...] },
+  "proposed_response": "<suggested reply to the client>"
+}`,
+            },
+          ],
         });
+
+        const responseText = response.content[0].type === "text" ? response.content[0].text : "";
+        const result = JSON.parse(responseText);
+
+        // Store the proposal
+        const { data: proposal, error: proposalError } = await supabase
+          .from("inbound_proposals")
+          .insert({
+            source: "slack",
+            source_metadata: { channel, user, thread_ts: event.thread_ts || event.ts, team: body.team_id },
+            client_id: result.client_match?.id || null,
+            proposed_task: result.proposed_task,
+            proposed_response: result.proposed_response,
+            status: "pending",
+          })
+          .select()
+          .single();
+
+        if (proposalError) {
+          console.error("[slack-events] Failed to store proposal:", proposalError);
+        }
+
+        // Send proposal to Telegram for approval
+        const token = process.env.TELEGRAM_BOT_TOKEN;
+        const chatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+        if (token && chatId && proposal) {
+          const clientName = result.client_match ? result.client_match.name : "Unknown client";
+          const telegramMessage = `*New Inbound Proposal (Slack)*\nClient: ${clientName}\n\n*Proposed Task:*\nTitle: ${result.proposed_task.title}\nPriority: ${result.proposed_task.priority}\nTags: ${result.proposed_task.tags.join(", ")}\n\n${result.proposed_task.description}\n\n*Proposed Response:*\n${result.proposed_response}\n\nTo approve: "approve proposal ${proposal.id}"\nTo reject: "reject proposal ${proposal.id}"`;
+          await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: chatId, text: telegramMessage, parse_mode: "Markdown" }),
+          });
+        }
       }
     }
 

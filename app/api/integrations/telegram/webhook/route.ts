@@ -115,10 +115,10 @@ export async function POST(req: NextRequest) {
         ``,
         ...clientLines,
         ``,
-        `Reply with: assign ${proposalId} [number]`,
+        "Reply with: `assign " + proposalId + " [number]`",
       ].join("\n");
 
-      await sendTelegram(msg, chatId, false);
+      await sendTelegram(msg, chatId);
       return NextResponse.json({ ok: true });
     }
 

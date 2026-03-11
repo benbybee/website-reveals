@@ -164,18 +164,27 @@ Respond with JSON:
                 `${result.proposed_response}`,
                 ``,
                 `──────────────`,
-                `💬 Reply in Slack: reply proposal ${proposal.id}`,
-                `✅ Approve task: approve proposal ${proposal.id}`,
-                `❌ Reject: reject proposal ${proposal.id}`,
+                "💬 Reply in Slack: `reply proposal " + proposal.id + "`",
+                "✅ Approve task: `approve proposal " + proposal.id + "`",
+                "❌ Reject: `reject proposal " + proposal.id + "`",
               ].join("\n");
 
-              const sendRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+              // Try with Markdown (for click-to-copy backtick commands), fall back to plain
+              let sendRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ chat_id: chatId, text: telegramMessage }),
+                body: JSON.stringify({ chat_id: chatId, text: telegramMessage, parse_mode: "Markdown" }),
               });
               if (!sendRes.ok) {
-                console.error("[slack-events] Telegram send failed:", await sendRes.text());
+                console.error("[slack-events] Telegram Markdown send failed, retrying plain:", await sendRes.text());
+                sendRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ chat_id: chatId, text: telegramMessage }),
+                });
+                if (!sendRes.ok) {
+                  console.error("[slack-events] Telegram plain send also failed:", await sendRes.text());
+                }
               }
             }
           } catch (err) {

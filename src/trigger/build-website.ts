@@ -25,8 +25,9 @@ export const buildWebsite = task({
     token: string;
     formType: string;
     prompt: string;
+    taskId?: string;
   }) => {
-    const { buildJobId, token, formType, prompt } = payload;
+    const { buildJobId, token, formType, prompt, taskId } = payload;
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -51,6 +52,21 @@ export const buildWebsite = task({
       .eq("id", buildJobId);
 
     if (updateErr) throw new Error(`Failed to update build status: ${updateErr.message}`);
+
+    // Move build task to in_progress
+    if (taskId) {
+      await supabase
+        .from("tasks")
+        .update({ status: "in_progress", updated_at: new Date().toISOString() })
+        .eq("id", taskId);
+      await supabase.from("task_status_history").insert({
+        task_id: taskId,
+        old_status: "backlog",
+        new_status: "in_progress",
+        notes: "Build started",
+        changed_by: "system",
+      });
+    }
 
     // Notify: build started
     await resend.emails.send({
@@ -98,6 +114,32 @@ export const buildWebsite = task({
         })
         .eq("id", buildJobId);
 
+      // Update client's website_url with the live site URL
+      const { data: clientRecord } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("form_session_token", token)
+        .single();
+      if (clientRecord) {
+        await supabase
+          .from("clients")
+          .update({ website_url: siteUrl, updated_at: new Date().toISOString() })
+          .eq("id", clientRecord.id);
+      }
+
+      // Add system comment to task with the live URL (task stays in_progress for review)
+      if (taskId) {
+        const commentLines = [`Build complete. Site is live and ready for review.`, `Site: ${siteUrl}`];
+        if (repoUrl) commentLines.push(`Repo: ${repoUrl}`);
+        await supabase.from("task_comments").insert({
+          task_id: taskId,
+          author_type: "system",
+          author_name: "Build System",
+          content: commentLines.join("\n"),
+          is_request: false,
+        });
+      }
+
       // Notify: build succeeded
       const repoLine = repoUrl
         ? `Repo: <a href="${repoUrl}">${repoUrl}</a>`
@@ -123,6 +165,28 @@ export const buildWebsite = task({
           completed_at: new Date().toISOString(),
         })
         .eq("id", buildJobId);
+
+      // Move task to blocked with error notes
+      if (taskId) {
+        await supabase
+          .from("tasks")
+          .update({ status: "blocked", updated_at: new Date().toISOString() })
+          .eq("id", taskId);
+        await supabase.from("task_status_history").insert({
+          task_id: taskId,
+          old_status: "in_progress",
+          new_status: "blocked",
+          notes: `Build failed: ${errorMsg.slice(0, 500)}`,
+          changed_by: "system",
+        });
+        await supabase.from("task_comments").insert({
+          task_id: taskId,
+          author_type: "system",
+          author_name: "Build System",
+          content: `Build failed.\n\n${errorMsg.slice(0, 1000)}`,
+          is_request: false,
+        });
+      }
 
       // Notify: build failed
       await resend.emails.send({

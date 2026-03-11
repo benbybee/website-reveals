@@ -9,6 +9,7 @@ import { FORM_STEPS } from "@/lib/form-steps";
 import { escapeHtml } from "@/lib/sanitize";
 import { getClientByEmail, createClient, updateClient } from "@/lib/clients";
 import { sendWelcomeEmail } from "@/lib/task-emails";
+import { createTask } from "@/lib/tasks";
 import { sendTelegramMessage } from "@/lib/telegram";
 
 function getResend() {
@@ -50,6 +51,7 @@ export async function POST(
   const formType = resolveFormType(formData);
 
   // Auto-create client from form submission
+  let buildTaskId: string | undefined;
   const autoCreateEmail =
     (formData.contact_email as string) ||
     (formData.email as string) ||
@@ -57,6 +59,7 @@ export async function POST(
   if (autoCreateEmail) {
     try {
       const existingClient = await getClientByEmail(autoCreateEmail);
+      let clientId: string;
       if (!existingClient) {
         const contactName = (formData.contact_person as string) || (formData.contact_name as string) || "";
         const nameParts = contactName.split(" ");
@@ -70,8 +73,27 @@ export async function POST(
           form_session_token: token,
         });
         await sendWelcomeEmail(client, pin);
-      } else if (!existingClient.form_session_token) {
-        await updateClient(existingClient.id, { form_session_token: token });
+        clientId = client.id;
+      } else {
+        if (!existingClient.form_session_token) {
+          await updateClient(existingClient.id, { form_session_token: token });
+        }
+        clientId = existingClient.id;
+      }
+
+      // Create a task to track this website build
+      try {
+        const buildTask = await createTask({
+          client_id: clientId,
+          title: `Website Build — ${businessName}`,
+          description: `Automated website build queued from form submission.\nForm type: ${formType}`,
+          status: "backlog",
+          priority: "high",
+          tags: ["website-build", formType],
+        });
+        buildTaskId = buildTask.id;
+      } catch (taskErr) {
+        console.error("[submit] Build task creation failed:", taskErr);
       }
     } catch (clientErr) {
       console.error("[submit] Client auto-creation failed:", clientErr);
@@ -140,6 +162,7 @@ export async function POST(
         token,
         formType,
         prompt,
+        taskId: buildTaskId,
       });
       console.log("[build] Trigger result:", JSON.stringify(triggerResult));
     }

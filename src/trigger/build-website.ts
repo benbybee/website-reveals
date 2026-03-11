@@ -225,6 +225,7 @@ function runClaudeCode(promptPath: string, cwd: string): Promise<string> {
         "--dangerously-skip-permissions", // No confirmation prompts
         "--output-format", "text",       // Plain text output
         "--verbose",
+        "--no-session-persistence",      // Don't load/save session history (prevents stale context)
       ],
       { cwd, stdio: ["pipe", "pipe", "pipe"] },
     );

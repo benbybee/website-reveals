@@ -2,13 +2,14 @@
 
 import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getStepsForMode } from "@/lib/form-steps";
+import { QuestionnaireMode, getStepsForMode } from "@/lib/form-steps";
 import { useFormSession } from "@/lib/use-form-session";
 import { FormLayout } from "./FormLayout";
 import { ModeSelector } from "./ModeSelector";
 import { StepCard } from "./StepCard";
 import { QuestionField } from "./QuestionField";
 import { SaveModal } from "./SaveModal";
+import { AiWizardChat } from "./AiWizardChat";
 
 interface FormShellProps {
   initialToken?: string;
@@ -20,6 +21,7 @@ export function FormShell({ initialToken }: FormShellProps) {
     token,
     mode,
     setMode,
+    bulkSetFormData,
     resetMode,
     currentStep,
     formData,
@@ -31,6 +33,8 @@ export function FormShell({ initialToken }: FormShellProps) {
     prevStep,
   } = useFormSession(initialToken);
 
+  const [aiWizardActive, setAiWizardActive] = useState(false);
+  const [aiFilledMode, setAiFilledMode] = useState<QuestionnaireMode | null>(null);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [direction, setDirection] = useState(1);
@@ -94,8 +98,21 @@ export function FormShell({ initialToken }: FormShellProps) {
     );
   }
 
-  if (!mode) {
-    return <ModeSelector onSelect={setMode} />;
+  if (!mode && !aiWizardActive) {
+    return <ModeSelector onSelect={setMode} onStartAiWizard={() => setAiWizardActive(true)} />;
+  }
+
+  if (aiWizardActive) {
+    return (
+      <AiWizardChat
+        onComplete={(m, data) => {
+          bulkSetFormData(m, data);
+          setAiWizardActive(false);
+          setAiFilledMode(m);
+        }}
+        onBack={() => setAiWizardActive(false)}
+      />
+    );
   }
 
   return (
@@ -106,6 +123,27 @@ export function FormShell({ initialToken }: FormShellProps) {
         totalSteps={totalSteps}
         onSave={() => setSaveModalOpen(true)}
       >
+        {aiFilledMode && (
+          <div style={{
+            maxWidth: "620px",
+            margin: "0 auto 24px",
+            padding: "14px 18px",
+            background: "#fff5f2",
+            border: "1px solid #ffcdc0",
+            borderRadius: "4px",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            fontFamily: "var(--font-sans)",
+            fontSize: "13px",
+            color: "#111110",
+          }}>
+            <span style={{ fontSize: "16px", flexShrink: 0 }}>✨</span>
+            <span>
+              <strong>AI-filled</strong> — review your answers and edit anything before submitting.
+            </span>
+          </div>
+        )}
         <StepCard stepKey={currentStep} direction={direction} icon={step.icon} title={step.title} subtitle={step.subtitle}>
           <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
             {step.questions.map((q) => (

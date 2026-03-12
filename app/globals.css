@@ -18,6 +18,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
 
 html, body {
   background: #faf9f5;

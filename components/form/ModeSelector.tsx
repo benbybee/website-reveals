@@ -4,6 +4,7 @@ import { QuestionnaireMode } from "@/lib/form-steps";
 
 interface ModeSelectorProps {
   onSelect: (mode: QuestionnaireMode) => void;
+  onStartAiWizard: () => void;
 }
 
 const MODES: {
@@ -41,7 +42,6 @@ const MODES: {
     ],
     tradeoff: "We might need to follow up on a few specifics, but most things will be covered.",
     icon: "📋",
-    highlight: true,
   },
   {
     id: "in-depth",
@@ -58,7 +58,7 @@ const MODES: {
   },
 ];
 
-export function ModeSelector({ onSelect }: ModeSelectorProps) {
+export function ModeSelector({ onSelect, onStartAiWizard }: ModeSelectorProps) {
   return (
     <div
       style={{
@@ -267,6 +267,147 @@ export function ModeSelector({ onSelect }: ModeSelectorProps) {
             </button>
           </div>
         ))}
+      </div>
+
+      {/* AI Assisted Card */}
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "820px",
+          background: "#ffffff",
+          border: "1.5px solid #ff3d00",
+          borderRadius: "6px",
+          padding: "28px 24px",
+          marginBottom: "40px",
+          position: "relative",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: "-1px",
+            left: "24px",
+            background: "#ff3d00",
+            color: "#ffffff",
+            fontFamily: "var(--font-mono)",
+            fontSize: "10px",
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            padding: "3px 10px",
+            borderRadius: "0 0 4px 4px",
+          }}
+        >
+          Recommended
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "0",
+          }}
+        >
+          {/* Time badge */}
+          <div
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "10px",
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              color: "#ff3d00",
+              marginBottom: "14px",
+              marginTop: "10px",
+            }}
+          >
+            5–10 min
+          </div>
+
+          {/* Name */}
+          <h2
+            style={{
+              fontFamily: "var(--font-serif)",
+              fontWeight: 700,
+              fontSize: "1.45rem",
+              color: "#111110",
+              marginBottom: "10px",
+            }}
+          >
+            AI Assisted
+          </h2>
+
+          {/* Description */}
+          <p
+            style={{
+              fontFamily: "var(--font-sans)",
+              fontSize: "13.5px",
+              color: "#555553",
+              lineHeight: 1.55,
+              marginBottom: "18px",
+              maxWidth: "560px",
+            }}
+          >
+            Have a conversation instead of filling out a form. Our AI asks the right questions and
+            fills everything in for you.
+          </p>
+
+          {/* Bullets */}
+          <ul
+            style={{
+              listStyle: "none",
+              padding: 0,
+              margin: "0 0 18px 0",
+              display: "flex",
+              flexDirection: "column",
+              gap: "7px",
+            }}
+          >
+            {[
+              "Chat naturally about your business",
+              "AI picks the right level of detail",
+              "Review and edit before submitting",
+            ].map((b, i) => (
+              <li
+                key={i}
+                style={{
+                  fontFamily: "var(--font-sans)",
+                  fontSize: "12.5px",
+                  color: "#444442",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "8px",
+                }}
+              >
+                <span style={{ color: "#ff3d00", flexShrink: 0, marginTop: "1px" }}>—</span>
+                {b}
+              </li>
+            ))}
+          </ul>
+
+          {/* Tradeoff */}
+          <p
+            style={{
+              fontFamily: "var(--font-sans)",
+              fontSize: "12px",
+              color: "#999997",
+              lineHeight: 1.5,
+              borderTop: "1px solid #f0eeea",
+              paddingTop: "14px",
+              marginBottom: "22px",
+            }}
+          >
+            You&apos;ll review a pre-filled form before anything is submitted — nothing gets sent
+            without your approval.
+          </p>
+
+          {/* CTA */}
+          <button
+            onClick={onStartAiWizard}
+            className="btn-orange"
+            style={{ alignSelf: "flex-start", fontSize: "13px", padding: "11px 32px" }}
+          >
+            Start Chat →
+          </button>
+        </div>
       </div>
 
       {/* Save progress note */}

@@ -256,9 +256,14 @@ function runClaudeCode(promptPath: string, cwd: string): Promise<string> {
 
 /**
  * Extract a BUILD_RESULT_* value from Claude Code output.
+ * Handles plain and markdown-formatted variants:
+ *   BUILD_RESULT_SITE_URL: https://...
+ *   **BUILD_RESULT_SITE_URL:** `https://...`
+ *   BUILD_RESULT_SITE_URL: `https://...`
  */
 function extractResult(output: string, key: string): string | null {
-  const regex = new RegExp(`^${key}:\\s*(.+)$`, "m");
+  // Strip optional leading ** and trailing ** from key, optional backticks around value
+  const regex = new RegExp(`\\*{0,2}${key}\\*{0,2}:?\\*{0,2}\\s*\`?([^\\n\`]+)\`?`, "m");
   const match = output.match(regex);
   return match ? match[1].trim() : null;
 }

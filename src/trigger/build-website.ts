@@ -127,9 +127,20 @@ export const buildWebsite = task({
           .eq("id", clientRecord.id);
       }
 
-      // Add system comment to task with the live URL (task stays in_progress for review)
+      // Mark task as complete and add comment with live URL
       if (taskId) {
-        const commentLines = [`Build complete. Site is live and ready for review.`, `Site: ${siteUrl}`];
+        await supabase
+          .from("tasks")
+          .update({ status: "complete", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .eq("id", taskId);
+        await supabase.from("task_status_history").insert({
+          task_id: taskId,
+          old_status: "in_progress",
+          new_status: "complete",
+          notes: `Build deployed: ${siteUrl}`,
+          changed_by: "system",
+        });
+        const commentLines = [`Build complete. Site is live.`, `Site: ${siteUrl}`];
         if (repoUrl) commentLines.push(`Repo: ${repoUrl}`);
         await supabase.from("task_comments").insert({
           task_id: taskId,

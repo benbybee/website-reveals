@@ -83,6 +83,16 @@ export function useFormSession(initialToken?: string) {
     }));
   }, []);
 
+  const bulkSetFormData = useCallback((m: QuestionnaireMode, data: Record<string, unknown>) => {
+    setState((s) => ({
+      ...s,
+      mode: m,
+      currentStep: 1,
+      formData: { ...data, _mode: m },
+      dnsProvider: (data.dns_provider as string) || "",
+    }));
+  }, []);
+
   const resetMode = useCallback(() => {
     setState((s) => {
       const { _mode, ...rest } = s.formData as Record<string, unknown> & { _mode?: unknown };
@@ -139,6 +149,7 @@ export function useFormSession(initialToken?: string) {
     loading,
     saving,
     setMode,
+    bulkSetFormData,
     resetMode,
     updateField,
     saveToServer,

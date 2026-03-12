@@ -78,70 +78,75 @@ function parseMessage(content: string): ParsedSegment[] {
 function useAiChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [streaming, setStreaming] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
+  const messagesRef = useRef<ChatMessage[]>([]);
+  messagesRef.current = messages;
 
-  const sendMessage = useCallback(
-    async (userMessage: string) => {
-      const newMessages: ChatMessage[] = [...messages, { role: "user", content: userMessage }];
-      setMessages([...newMessages, { role: "assistant", content: "" }]);
-      setStreaming(true);
+  const sendMessage = useCallback(async (userMessage: string) => {
+    const prev = messagesRef.current;
+    const newMessages: ChatMessage[] = [...prev, { role: "user", content: userMessage }];
+    setMessages([...newMessages, { role: "assistant", content: "" }]);
+    setStreaming(true);
 
-      const controller = new AbortController();
-      abortRef.current = controller;
+    try {
+      const res = await fetch("/api/ai-wizard/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: newMessages }),
+      });
 
-      try {
-        const res = await fetch("/api/ai-wizard/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: newMessages }),
-          signal: controller.signal,
-        });
+      if (!res.ok) {
+        throw new Error(`API returned ${res.status}`);
+      }
 
-        const reader = res.body?.getReader();
-        const decoder = new TextDecoder();
-        let assistantContent = "";
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+      let assistantContent = "";
 
-        if (reader) {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split("\n");
-            for (const line of lines) {
-              if (line.startsWith("data: ")) {
-                const data = line.slice(6);
-                if (data === "[DONE]") continue;
-                try {
-                  const parsed = JSON.parse(data);
-                  if (parsed.type === "text") {
-                    assistantContent += parsed.text;
-                    setMessages([
-                      ...newMessages,
-                      { role: "assistant", content: assistantContent },
-                    ]);
-                  }
-                } catch {
-                  /* skip */
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split("\n");
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data = line.slice(6);
+              if (data === "[DONE]") continue;
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.type === "text") {
+                  assistantContent += parsed.text;
+                  setMessages([
+                    ...newMessages,
+                    { role: "assistant", content: assistantContent },
+                  ]);
+                } else if (parsed.type === "error") {
+                  console.error("AI wizard stream error:", parsed.error);
+                  assistantContent = "Sorry, something went wrong. Please try again.";
+                  break;
                 }
+              } catch {
+                /* skip unparseable SSE lines */
               }
             }
           }
         }
-
-        setMessages([...newMessages, { role: "assistant", content: assistantContent }]);
-      } catch (err) {
-        if ((err as Error).name !== "AbortError") {
-          setMessages([
-            ...newMessages,
-            { role: "assistant", content: "Sorry, something went wrong. Please try again." },
-          ]);
-        }
-      } finally {
-        setStreaming(false);
       }
-    },
-    [messages]
-  );
+
+      setMessages([...newMessages, { role: "assistant", content: assistantContent }]);
+    } catch (err) {
+      console.error("AI wizard fetch error:", err);
+      setMessages((prev) => {
+        const withoutLast = prev.slice(0, -1);
+        return [
+          ...withoutLast,
+          { role: "assistant" as const, content: "Sorry, something went wrong. Please try again." },
+        ];
+      });
+    } finally {
+      setStreaming(false);
+    }
+  }, []);
 
   return { messages, streaming, sendMessage };
 }

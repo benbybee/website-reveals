@@ -30,6 +30,7 @@ export function ClientsPanel({ clients: initial, onSelect }: ClientsPanelProps) 
   const [showAddModal, setShowAddModal] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [clearingAll, setClearingAll] = useState(false);
 
   const filtered = useMemo(() => {
     let result = [...clients];
@@ -83,6 +84,20 @@ export function ClientsPanel({ clients: initial, onSelect }: ClientsPanelProps) 
   const sortIndicator = (key: SortKey) => {
     if (sortKey !== key) return "";
     return sortDir === "asc" ? " \u2191" : " \u2193";
+  };
+
+  const handleClearAll = async () => {
+    if (!confirm(`Delete ALL ${clients.length} clients and their tasks? This cannot be undone.`)) return;
+    if (!confirm("Are you absolutely sure? This will permanently delete every client, task, and proposal.")) return;
+    setClearingAll(true);
+    const res = await fetch("/api/admin/clients/clear", { method: "DELETE" });
+    if (res.ok) {
+      setClients([]);
+      setSelected(null);
+    } else {
+      alert("Failed to clear clients.");
+    }
+    setClearingAll(false);
   };
 
   const handleRowClick = (client: Client) => {
@@ -158,9 +173,40 @@ export function ClientsPanel({ clients: initial, onSelect }: ClientsPanelProps) 
           </h2>
           <span style={countBadgeStyle}>{filtered.length}</span>
         </div>
-        <button onClick={() => setShowAddModal(true)} style={primaryButtonStyle}>
-          Add Client
-        </button>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          {clients.length > 0 && (
+            <button
+              onClick={handleClearAll}
+              disabled={clearingAll}
+              style={{
+                background: "transparent",
+                color: "#c8c6be",
+                border: "1.5px solid #e8e6df",
+                fontSize: "12px",
+                padding: "6px 14px",
+                borderRadius: "4px",
+                cursor: clearingAll ? "not-allowed" : "pointer",
+                fontFamily: "var(--font-sans)",
+                fontWeight: 500,
+                transition: "all 0.12s",
+                opacity: clearingAll ? 0.6 : 1,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "#ff3d00";
+                e.currentTarget.style.borderColor = "#ff3d00";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "#c8c6be";
+                e.currentTarget.style.borderColor = "#e8e6df";
+              }}
+            >
+              {clearingAll ? "Clearing..." : "Clear All"}
+            </button>
+          )}
+          <button onClick={() => setShowAddModal(true)} style={primaryButtonStyle}>
+            Add Client
+          </button>
+        </div>
       </div>
 
       {/* Search */}

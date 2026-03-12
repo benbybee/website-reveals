@@ -23,6 +23,7 @@ export function SubmissionsTable({ sessions: initial }: { sessions: FormSession[
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [selected, setSelected] = useState<FormSession | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [clearingAll, setClearingAll] = useState(false);
 
   const newCount = useMemo(() => sessions.filter((s) => !s.exported_at).length, [sessions]);
 
@@ -126,6 +127,20 @@ export function SubmissionsTable({ sessions: initial }: { sessions: FormSession[
     setDeleting(null);
   };
 
+  const handleClearAll = async () => {
+    if (!confirm(`Delete ALL ${sessions.length} submissions? This cannot be undone.`)) return;
+    if (!confirm("Are you absolutely sure? This will permanently delete every submission.")) return;
+    setClearingAll(true);
+    const res = await fetch("/api/admin/submissions/clear", { method: "DELETE" });
+    if (res.ok) {
+      setSessions([]);
+      setSelected(null);
+    } else {
+      alert("Failed to clear submissions.");
+    }
+    setClearingAll(false);
+  };
+
   const handleExported = (session: FormSession) => {
     setSessions((prev) =>
       prev.map((s) =>
@@ -139,6 +154,57 @@ export function SubmissionsTable({ sessions: initial }: { sessions: FormSession[
 
   return (
     <>
+      {/* Header with Clear All */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: "16px",
+        }}
+      >
+        <h2
+          style={{
+            fontFamily: "var(--font-sans)",
+            fontSize: "16px",
+            fontWeight: 600,
+            color: "#111110",
+            margin: 0,
+          }}
+        >
+          Submissions
+        </h2>
+        {sessions.length > 0 && (
+          <button
+            onClick={handleClearAll}
+            disabled={clearingAll}
+            style={{
+              background: "transparent",
+              color: "#c8c6be",
+              border: "1.5px solid #e8e6df",
+              fontSize: "12px",
+              padding: "6px 14px",
+              borderRadius: "4px",
+              cursor: clearingAll ? "not-allowed" : "pointer",
+              fontFamily: "var(--font-sans)",
+              fontWeight: 500,
+              transition: "all 0.12s",
+              opacity: clearingAll ? 0.6 : 1,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = "#ff3d00";
+              e.currentTarget.style.borderColor = "#ff3d00";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = "#c8c6be";
+              e.currentTarget.style.borderColor = "#e8e6df";
+            }}
+          >
+            {clearingAll ? "Clearing..." : "Clear All"}
+          </button>
+        )}
+      </div>
+
       {/* Filters */}
       <div
         style={{

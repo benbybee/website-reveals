@@ -211,17 +211,22 @@ export const SHARED_INSTRUCTIONS = `
    \`\`\`
    This step is NOT optional. Every build must be committed to the GitHub repo created in step 1.
 
-5. **Output these exact lines as the LAST thing you do (REQUIRED — the system parses them):**
-   \`\`\`
-   BUILD_RESULT_REPO_URL: https://github.com/Website-Reveals/<SLUG>
-   BUILD_RESULT_SITE_URL: <the NEW cloned Cloudways app URL — NOT the template URL>
-   \`\`\`
-   Both lines MUST appear in your final output. If either is missing, the build is flagged as incomplete.
+5. OUTPUT THE RESULT MARKERS — this is mandatory and machine-parsed.
+
+After the git push completes, your VERY LAST output must be these two lines and NOTHING else after them.
+No markdown. No bold. No backticks. No explanation. Just these two plain lines:
+
+BUILD_RESULT_REPO_URL: https://github.com/Website-Reveals/<SLUG>
+BUILD_RESULT_SITE_URL: <the NEW cloned Cloudways app URL>
+
+IMPORTANT: The lines must start with BUILD_RESULT_ with no leading spaces, asterisks, or backticks.
+If these lines are missing or malformatted, the entire build is treated as FAILED and will be rerun from scratch.
 
 ## Critical Rules
-- **NEVER deploy to the template site** (wordpress-1595966-6251852). Always clone first.
-- **ALWAYS create and push to a GitHub repo.** No exceptions.
+- NEVER deploy to the template site (wordpress-1595966-6251852). Always clone first.
+- ALWAYS create and push to a GitHub repo. No exceptions.
 - Use the client brief below as your ONLY source of requirements. Do not ask for clarification.
 - If information is missing, make reasonable professional decisions.
 - The site must be fully deployed and live when you're done.
+- Your final two lines of output MUST be BUILD_RESULT_REPO_URL and BUILD_RESULT_SITE_URL in plain text.
 `;

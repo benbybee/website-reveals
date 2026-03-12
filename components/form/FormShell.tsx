@@ -9,6 +9,7 @@ import { ModeSelector } from "./ModeSelector";
 import { StepCard } from "./StepCard";
 import { QuestionField } from "./QuestionField";
 import { SaveModal } from "./SaveModal";
+import { AiWizardChat } from "./AiWizardChat";
 
 interface FormShellProps {
   initialToken?: string;
@@ -20,6 +21,7 @@ export function FormShell({ initialToken }: FormShellProps) {
     token,
     mode,
     setMode,
+    bulkSetFormData,
     resetMode,
     currentStep,
     formData,
@@ -31,6 +33,7 @@ export function FormShell({ initialToken }: FormShellProps) {
     prevStep,
   } = useFormSession(initialToken);
 
+  const [aiWizardActive, setAiWizardActive] = useState(false);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [direction, setDirection] = useState(1);
@@ -94,8 +97,20 @@ export function FormShell({ initialToken }: FormShellProps) {
     );
   }
 
-  if (!mode) {
-    return <ModeSelector onSelect={setMode} />;
+  if (!mode && !aiWizardActive) {
+    return <ModeSelector onSelect={setMode} onStartAiWizard={() => setAiWizardActive(true)} />;
+  }
+
+  if (aiWizardActive) {
+    return (
+      <AiWizardChat
+        onComplete={(m, data) => {
+          bulkSetFormData(m, data);
+          setAiWizardActive(false);
+        }}
+        onBack={() => setAiWizardActive(false)}
+      />
+    );
   }
 
   return (

@@ -166,6 +166,30 @@ export const buildWebsite = task({
         console.error("Failed to send build-complete email:", emailErr);
       }
 
+      // Notify admin via Telegram with task context for approval
+      try {
+        const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+        const tgChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+        if (tgToken && tgChatId) {
+          const tgLines = [
+            `✅ Build Complete — ${businessName}`,
+            ``,
+            `Site: ${siteUrl}`,
+          ];
+          if (repoUrl) tgLines.push(`Repo: ${repoUrl}`);
+          if (taskId) tgLines.push(`Task ID: ${taskId.slice(0, 8)}`);
+          tgLines.push(``, `Review the site, then reply here to approve.`);
+
+          await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: tgChatId, text: tgLines.join("\n") }),
+          });
+        }
+      } catch (tgErr) {
+        console.error("Failed to send build-complete Telegram:", tgErr);
+      }
+
       return { status: "deployed", repoUrl, siteUrl };
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);

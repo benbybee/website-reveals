@@ -250,7 +250,7 @@ export async function POST(req: NextRequest) {
       }));
 
     // Fetch context
-    const [clientsRes, tasksRes, proposalsRes] = await Promise.all([
+    const [clientsRes, tasksRes, proposalsRes, buildsRes] = await Promise.all([
       supabase.from("clients").select("*").order("company_name"),
       supabase
         .from("tasks")
@@ -262,11 +262,17 @@ export async function POST(req: NextRequest) {
         .select("*")
         .eq("status", "pending")
         .order("created_at", { ascending: false }),
+      supabase
+        .from("build_jobs")
+        .select("id, form_session_token, site_url, repo_url, completed_at, task_id")
+        .eq("status", "deployed")
+        .order("completed_at", { ascending: false }),
     ]);
 
     const clients = (clientsRes.data || []) as Record<string, unknown>[];
     const activeTasks = (tasksRes.data || []) as Record<string, unknown>[];
     const pendingProposals = (proposalsRes.data || []) as Record<string, unknown>[];
+    const deployedBuilds = (buildsRes.data || []) as Record<string, unknown>[];
 
     const clientList = clients
       .map(
@@ -289,6 +295,44 @@ export async function POST(req: NextRequest) {
       })
       .join("\n");
 
+    // Find tasks with deployed builds awaiting review
+    // These are tasks still in_progress that have a "Build deployed" comment from the build system
+    const buildTaskIds = activeTasks
+      .filter((t) => {
+        const tags = t.tags as string[] | null;
+        return t.status === "in_progress" && tags?.includes("website-build");
+      })
+      .map((t) => t.id as string);
+
+    let buildsAwaitingReview = "";
+    if (buildTaskIds.length > 0) {
+      const { data: buildComments } = await supabase
+        .from("task_comments")
+        .select("task_id, content")
+        .eq("author_name", "Build System")
+        .in("task_id", buildTaskIds)
+        .order("created_at", { ascending: false });
+
+      const buildInfo = (buildComments || []).reduce<Record<string, string>>((acc, c) => {
+        const tid = c.task_id as string;
+        if (!acc[tid]) acc[tid] = c.content as string;
+        return acc;
+      }, {});
+
+      const reviewLines = buildTaskIds
+        .filter((tid) => buildInfo[tid])
+        .map((tid) => {
+          const task = activeTasks.find((t) => t.id === tid);
+          const comment = buildInfo[tid];
+          // Extract site URL from comment
+          const urlMatch = comment.match(/Site:\s*(https?:\/\/\S+)/);
+          const siteUrl = urlMatch ? urlMatch[1] : "URL not found";
+          return `- [${tid.slice(0, 8)}] ${task?.title || "Unknown"} — ${siteUrl}`;
+        });
+
+      buildsAwaitingReview = reviewLines.join("\n");
+    }
+
     const systemPrompt = `You are Ben's AI assistant for managing client tasks at Website Reveals. You communicate via Telegram.
 
 You can:
@@ -305,8 +349,13 @@ ${clientList || "No clients yet."}
 ACTIVE TASKS:
 ${taskList || "No active tasks."}
 
+BUILDS AWAITING YOUR REVIEW (reply "looks good" or "approve" to mark complete and notify the client):
+${buildsAwaitingReview || "No builds awaiting review."}
+
 PENDING PROPOSALS (awaiting your approval/rejection):
 ${proposalList || "No pending proposals."}
+
+IMPORTANT: When Ben approves a build (says "looks good", "approve it", "mark it complete", etc.), use update_task with status "complete" for the matching build task. This will trigger a notification email to the client.
 
 Respond with JSON only, no markdown fences:
 {
@@ -373,7 +422,7 @@ For reject_proposal: data = { "proposal_id": "..." }`;
           const d = result.data;
           const { data: current } = await supabase
             .from("tasks")
-            .select("status")
+            .select("*, clients(*)")
             .eq("id", d.task_id)
             .single();
           const updateData: Record<string, unknown> = {
@@ -394,6 +443,21 @@ For reject_proposal: data = { "proposal_id": "..." }`;
             notes: d.notes || null,
             changed_by: "ai-agent",
           });
+
+          // Send client notification email on task completion
+          if (d.status === "complete" && current?.clients) {
+            try {
+              const { sendStatusChangeEmail } = await import("@/lib/task-emails");
+              await sendStatusChangeEmail(
+                current.clients,
+                { ...current, status: d.status, completed_at: updateData.completed_at },
+                "complete",
+                d.notes
+              );
+            } catch (emailErr) {
+              console.error("[telegram] Failed to send completion email to client:", emailErr);
+            }
+          }
           break;
         }
         case "delete_task": {

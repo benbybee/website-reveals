@@ -8,6 +8,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 
 const FROM = "Website Reveals <creativemarketing@websitereveals.com>";
+const MAX_DURATION_SECONDS = 1800;
 
 function getNotifyList(formType: string): string[] {
   if (formType === "new-client") {
@@ -19,7 +20,7 @@ function getNotifyList(formType: string): string[] {
 export const buildWebsite = task({
   id: "build-website",
   // Claude Code builds can take 10-30+ minutes
-  maxDuration: 1800,
+  maxDuration: MAX_DURATION_SECONDS,
   run: async (payload: {
     buildJobId: string;
     token: string;
@@ -127,20 +128,16 @@ export const buildWebsite = task({
           .eq("id", clientRecord.id);
       }
 
-      // Mark task as complete and add comment with live URL
+      // Add comment with live URL — task stays in_progress for admin review
       if (taskId) {
-        await supabase
-          .from("tasks")
-          .update({ status: "complete", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-          .eq("id", taskId);
         await supabase.from("task_status_history").insert({
           task_id: taskId,
           old_status: "in_progress",
-          new_status: "complete",
-          notes: `Build deployed: ${siteUrl}`,
+          new_status: "in_progress",
+          notes: `Build deployed — awaiting review: ${siteUrl}`,
           changed_by: "system",
         });
-        const commentLines = [`Build complete. Site is live.`, `Site: ${siteUrl}`];
+        const commentLines = [`Build deployed — ready for review.`, `Site: ${siteUrl}`];
         if (repoUrl) commentLines.push(`Repo: ${repoUrl}`);
         await supabase.from("task_comments").insert({
           task_id: taskId,
@@ -151,18 +148,23 @@ export const buildWebsite = task({
         });
       }
 
-      // Notify: build succeeded
+      // Notify admin: build succeeded (wrapped so email failure doesn't mark build as failed)
       const repoLine = repoUrl
         ? `Repo: <a href="${repoUrl}">${repoUrl}</a>`
         : `<span style="color:#e65100">⚠ GitHub repo was NOT created — check VPS gh auth</span>`;
-      await resend.emails.send({
-        from: FROM,
-        to: getNotifyList(formType),
-        subject: `Build Complete — ${businessName}`,
-        html: `<p>The website build for <strong>${businessName}</strong> has finished successfully.</p>
-               <p>Site: <a href="${siteUrl}">${siteUrl}</a><br>
-               ${repoLine}</p>`,
-      });
+      try {
+        await resend.emails.send({
+          from: FROM,
+          to: getNotifyList(formType),
+          subject: `Build Complete — ${businessName}`,
+          html: `<p>The website build for <strong>${businessName}</strong> has finished successfully and is ready for review.</p>
+                 <p>Site: <a href="${siteUrl}">${siteUrl}</a><br>
+                 ${repoLine}</p>
+                 <p><em>Review the site, then mark the task as complete in the admin panel to notify the client.</em></p>`,
+        });
+      } catch (emailErr) {
+        console.error("Failed to send build-complete email:", emailErr);
+      }
 
       return { status: "deployed", repoUrl, siteUrl };
     } catch (err) {
@@ -207,13 +209,54 @@ export const buildWebsite = task({
         html: `<p>The website build for <strong>${businessName}</strong> has failed.</p>
                <p>Error: <code>${errorMsg.slice(0, 500)}</code></p>
                <p>Build job ID: ${buildJobId}</p>`,
-      }).catch(() => {}); // Don't let email failure mask the build error
+      }).catch((emailErr) => {
+        console.error("Failed to send build-failed email:", emailErr);
+      });
 
       throw err;
     } finally {
       // Clean up temp directory (repo was pushed to GitHub, local copy not needed)
       if (workDir) {
         await rm(workDir, { recursive: true, force: true }).catch(() => {});
+      }
+
+      // Safety net: if the build_jobs row is still "building" at this point,
+      // it means neither success nor failure path completed (e.g. maxDuration kill).
+      // Mark it as failed so the watchdog can resubmit.
+      try {
+        const { data: job } = await supabase
+          .from("build_jobs")
+          .select("status")
+          .eq("id", buildJobId)
+          .single();
+        if (job?.status === "building") {
+          console.error(`Build ${buildJobId} still in "building" at finally — marking failed (likely maxDuration kill)`);
+          await supabase
+            .from("build_jobs")
+            .update({
+              status: "failed",
+              error: "Build timed out (maxDuration exceeded) — will be resubmitted by watchdog",
+              completed_at: new Date().toISOString(),
+            })
+            .eq("id", buildJobId);
+          if (taskId) {
+            await supabase
+              .from("tasks")
+              .update({ status: "blocked", updated_at: new Date().toISOString() })
+              .eq("id", taskId);
+          }
+          await resend.emails.send({
+            from: FROM,
+            to: getNotifyList(formType),
+            subject: `Build Timed Out — ${businessName}`,
+            html: `<p>The website build for <strong>${businessName}</strong> timed out after ${Math.round(MAX_DURATION_SECONDS / 60)} minutes and will be automatically resubmitted.</p>
+                   <p>Build job ID: ${buildJobId}</p>`,
+          }).catch((emailErr) => {
+            console.error("Failed to send build-timeout email:", emailErr);
+          });
+        }
+      } catch (finallyErr) {
+        console.error("Error in finally safety net:", finallyErr);
       }
     }
   },

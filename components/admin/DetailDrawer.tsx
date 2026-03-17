@@ -199,9 +199,9 @@ export function DetailDrawer({
             "current_url", "service_areas", "domain_name", "dns_provider",
             "details", "_source", "_mode",
           ]);
-          const extra = Object.entries(fd).filter(
-            ([k, v]) => !covered.has(k) && v && String(v).trim()
-          );
+          const extra = Object.entries(fd)
+            .filter(([k, v]) => !covered.has(k) && v && String(v).trim())
+            .map(([k, v]) => [k, Array.isArray(v) ? v.join(", ") : String(v)] as const);
           if (extra.length === 0) return null;
           return (
             <Section title="Questionnaire Responses">
@@ -209,7 +209,7 @@ export function DetailDrawer({
                 <Row
                   key={k}
                   label={k.replace(/_/g, " ")}
-                  value={String(v)}
+                  value={v}
                 />
               ))}
             </Section>

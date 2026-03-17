@@ -14,9 +14,13 @@ export function generateMarkdown(
   dnsProvider: string | null,
   submittedAt: string | null,
 ): string {
-  const fd = formData as Record<string, string | undefined>;
-  const name = fd.business_name || "Unknown Business";
-  const source = fd._source || "claim-your-site";
+  const str = (key: string): string | undefined => {
+    const v = formData[key];
+    if (Array.isArray(v)) return v.join(", ");
+    return typeof v === "string" ? v : undefined;
+  };
+  const name = str("business_name") || "Unknown Business";
+  const source = str("_source") || "claim-your-site";
   const date = submittedAt
     ? new Date(submittedAt).toLocaleDateString("en-US", {
         year: "numeric",
@@ -33,38 +37,38 @@ export function generateMarkdown(
 
   // Business Details
   lines.push("## Business Details");
-  if (fd.business_name) lines.push(`- **Business Name:** ${fd.business_name}`);
-  if (fd.contact_person) lines.push(`- **Contact:** ${fd.contact_person}`);
-  if (fd.email) lines.push(`- **Email:** ${fd.email}`);
-  if (fd.phone) lines.push(`- **Phone:** ${fd.phone}`);
-  if (fd.address) lines.push(`- **Address:** ${fd.address}`);
-  if (fd.current_url) lines.push(`- **Current URL:** ${fd.current_url}`);
+  if (str("business_name")) lines.push(`- **Business Name:** ${str("business_name")}`);
+  if (str("contact_person")) lines.push(`- **Contact:** ${str("contact_person")}`);
+  if (str("email")) lines.push(`- **Email:** ${str("email")}`);
+  if (str("phone")) lines.push(`- **Phone:** ${str("phone")}`);
+  if (str("address")) lines.push(`- **Address:** ${str("address")}`);
+  if (str("current_url")) lines.push(`- **Current URL:** ${str("current_url")}`);
   lines.push("");
 
   // Service Area
-  if (fd.service_areas) {
+  if (str("service_areas")) {
     lines.push("## Service Area");
-    lines.push(fd.service_areas);
+    lines.push(str("service_areas")!);
     lines.push("");
   }
 
   // Domain & DNS
-  if (fd.domain_name || dnsProvider) {
+  if (str("domain_name") || dnsProvider) {
     lines.push("## Domain & DNS");
-    if (fd.domain_name) lines.push(`- **Domain:** ${fd.domain_name}`);
+    if (str("domain_name")) lines.push(`- **Domain:** ${str("domain_name")}`);
     if (dnsProvider) lines.push(`- **DNS Provider:** ${DNS_LABELS[dnsProvider] || dnsProvider}`);
     lines.push("");
   }
 
   // Additional Details
-  if (fd.details) {
+  if (str("details")) {
     lines.push("## Additional Details");
-    lines.push(fd.details);
+    lines.push(str("details")!);
     lines.push("");
   }
 
   // Questionnaire Responses (from multi-step forms)
-  const mode = fd._mode as string | undefined;
+  const mode = str("_mode");
   let steps = FORM_STEPS;
   if (mode === "quick") steps = QUICK_STEPS;
   else if (mode === "standard") steps = STANDARD_STEPS;
@@ -80,7 +84,8 @@ export function generateMarkdown(
 
   for (const q of allQuestions) {
     if (knownKeys.has(q.id)) continue;
-    const val = fd[q.id];
+    const raw = formData[q.id];
+    const val = Array.isArray(raw) ? raw.join(", ") : typeof raw === "string" ? raw : undefined;
     if (val && val.trim()) {
       questionnaireAnswers.push({ label: q.label, value: val });
     }

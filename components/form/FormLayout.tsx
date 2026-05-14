@@ -7,7 +7,7 @@ interface FormLayoutProps {
   currentStep: number;
   totalSteps: number;
   children: React.ReactNode;
-  onSave: () => void;
+  onSave?: () => void;
 }
 
 export function FormLayout({ currentStep, totalSteps, children, onSave }: FormLayoutProps) {
@@ -46,32 +46,34 @@ export function FormLayout({ currentStep, totalSteps, children, onSave }: FormLa
 
         <ProgressBar current={currentStep} total={totalSteps} />
 
-        <button
-          onClick={onSave}
-          style={{
-            flexShrink: 0,
-            fontFamily: "var(--font-mono)",
-            fontSize: "11px",
-            letterSpacing: "0.04em",
-            color: "#888886",
-            background: "none",
-            border: "1.5px solid #e8e6df",
-            borderRadius: "4px",
-            padding: "6px 14px",
-            cursor: "pointer",
-            transition: "border-color 0.15s, color 0.15s",
-          }}
-          onMouseEnter={(e) => {
-            (e.target as HTMLButtonElement).style.borderColor = "#ff3d00";
-            (e.target as HTMLButtonElement).style.color = "#ff3d00";
-          }}
-          onMouseLeave={(e) => {
-            (e.target as HTMLButtonElement).style.borderColor = "#e8e6df";
-            (e.target as HTMLButtonElement).style.color = "#888886";
-          }}
-        >
-          Save progress
-        </button>
+        {onSave && (
+          <button
+            onClick={onSave}
+            style={{
+              flexShrink: 0,
+              fontFamily: "var(--font-mono)",
+              fontSize: "11px",
+              letterSpacing: "0.04em",
+              color: "#888886",
+              background: "none",
+              border: "1.5px solid #e8e6df",
+              borderRadius: "4px",
+              padding: "6px 14px",
+              cursor: "pointer",
+              transition: "border-color 0.15s, color 0.15s",
+            }}
+            onMouseEnter={(e) => {
+              (e.target as HTMLButtonElement).style.borderColor = "#ff3d00";
+              (e.target as HTMLButtonElement).style.color = "#ff3d00";
+            }}
+            onMouseLeave={(e) => {
+              (e.target as HTMLButtonElement).style.borderColor = "#e8e6df";
+              (e.target as HTMLButtonElement).style.color = "#888886";
+            }}
+          >
+            Save progress
+          </button>
+        )}
       </header>
 
       {/* Content */}

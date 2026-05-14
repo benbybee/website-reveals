@@ -251,6 +251,47 @@ export const QUICK_STEPS: FormStep[] = [
   },
 ];
 
+// ─── Sales Mode (sales agent submitting on behalf of a client) ──────────────
+// Same shape as QUICK_STEPS but phrased in third person ("the business") and
+// the contact_* fields are clearly marked as the sales agent's, not the client's.
+// Submissions tag form_data with _source: "sales" and _mode: "quick" so the
+// existing quick prompt template is reused.
+
+export const SALES_QUICK_STEPS: FormStep[] = [
+  {
+    step: 1,
+    title: "Tell Us About the Business",
+    subtitle: "The Basics",
+    icon: "🏢",
+    questions: [
+      { id: "business_name", label: "What is the business name?", type: "text", required: true },
+      { id: "contact_email", label: "Your email (sales agent)", type: "email", required: true, hint: "We'll email you when the site is ready for review. This is your email, not the client's." },
+      { id: "contact_phone", label: "Your phone number (sales agent)", type: "tel" },
+      { id: "phone", label: "Phone number for the business's customers to call", type: "tel" },
+      { id: "email", label: "Email address for the business's customers", type: "email" },
+      { id: "service_areas", label: "What cities or regions does the business serve?", type: "textarea" },
+      { id: "contact_method", label: "How does the business prefer customers to reach them? (select all that apply)", type: "checkbox", options: ["Phone call", "Text message", "Email", "Contact form"] },
+      { id: "domain_owned", label: "Does the business already own their domain name?", type: "radio", options: ["Yes", "No", "Not sure"] },
+      { id: "domain_name", label: "If yes, what is the domain name?", type: "text", placeholder: "businessname.com" },
+      { id: "dns_provider", label: "Who manages the domain/DNS?", type: "dns-selector" },
+    ],
+  },
+  {
+    step: 2,
+    title: "The Website",
+    subtitle: "What We're Building",
+    icon: "🎯",
+    questions: [
+      { id: "all_services", label: "What services or products does the business offer?", type: "textarea" },
+      { id: "standard_pages", label: "What pages does the business need?", type: "checkbox", options: ["Home", "About", "Services", "Individual service pages", "Contact", "FAQ", "Blog", "Gallery", "Testimonials", "Financing", "Careers", "Team", "Resources", "Privacy Policy", "Terms and Conditions"] },
+      { id: "why_building", label: "Why is the business building or redesigning their website right now?", type: "textarea" },
+      { id: "differentiators", label: "What makes the business different from competitors?", type: "textarea" },
+      { id: "inspiration_sites", label: "Any websites the business loves or wants theirs to look similar to?", type: "textarea", hint: "Include what they like about each one" },
+      { id: "anything_else", label: "Anything else we should know?", type: "textarea" },
+    ],
+  },
+];
+
 // ─── Standard Mode (~15 min, 6 steps) ────────────────────────────────────────
 
 export const STANDARD_STEPS: FormStep[] = [

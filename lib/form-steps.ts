@@ -271,9 +271,6 @@ export const SALES_QUICK_STEPS: FormStep[] = [
       { id: "email", label: "Email address for the business's customers", type: "email" },
       { id: "service_areas", label: "What cities or regions does the business serve?", type: "textarea" },
       { id: "contact_method", label: "How does the business prefer customers to reach them? (select all that apply)", type: "checkbox", options: ["Phone call", "Text message", "Email", "Contact form"] },
-      { id: "domain_owned", label: "Does the business already own their domain name?", type: "radio", options: ["Yes", "No", "Not sure"] },
-      { id: "domain_name", label: "If yes, what is the domain name?", type: "text", placeholder: "businessname.com" },
-      { id: "dns_provider", label: "Who manages the domain/DNS?", type: "dns-selector" },
     ],
   },
   {

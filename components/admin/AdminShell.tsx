@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Link from "next/link";
 import type { FormSession } from "@/lib/supabase/types";
 import type { Client, TaskWithClient } from "@/lib/types/client-tasks";
 import { useRealtimeRefresh } from "@/hooks/use-realtime-refresh";
@@ -118,6 +119,21 @@ export function AdminShell({
         <div
           style={{ display: "flex", alignItems: "center", gap: "16px" }}
         >
+          <Link
+            href="/admin/billing"
+            style={{
+              fontFamily: "var(--font-sans)",
+              fontSize: "13px",
+              fontWeight: 500,
+              color: "#555553",
+              textDecoration: "none",
+              border: "1.5px solid #d8d6cf",
+              borderRadius: "3px",
+              padding: "6px 14px",
+            }}
+          >
+            Billing →
+          </Link>
           <span
             style={{
               fontFamily: "var(--font-sans)",

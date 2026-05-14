@@ -88,8 +88,9 @@ export const buildWebsite = task({
       const promptPath = join(workDir, "PROMPT.md");
       await writeFile(promptPath, prompt, "utf-8");
 
-      // Run Claude Code CLI
-      const output = await runClaudeCode(promptPath, workDir);
+      // Run Claude Code CLI (returns parsed JSON result with text + usage)
+      const result = await runClaudeCode(promptPath, workDir);
+      const output = result.text;
 
       // Parse results from Claude Code output
       const repoUrl = extractResult(output, "BUILD_RESULT_REPO_URL");
@@ -103,7 +104,8 @@ export const buildWebsite = task({
 
       const missingRepo = !repoUrl;
 
-      // Mark as deployed (site is live even if repo wasn't created)
+      // Mark as deployed (site is live even if repo wasn't created).
+      // Cost/token fields will be null if --output-format json wasn't honored.
       await supabase
         .from("build_jobs")
         .update({
@@ -112,6 +114,11 @@ export const buildWebsite = task({
           site_url: siteUrl,
           error: missingRepo ? "Warning: GitHub repo was not created" : null,
           completed_at: new Date().toISOString(),
+          cost_usd: result.costUsd,
+          input_tokens: result.inputTokens,
+          output_tokens: result.outputTokens,
+          cache_read_tokens: result.cacheReadTokens,
+          cache_creation_tokens: result.cacheCreationTokens,
         })
         .eq("id", buildJobId);
 
@@ -286,12 +293,28 @@ export const buildWebsite = task({
   },
 });
 
+interface ClaudeCodeResult {
+  text: string;                       // Assistant's final text (parsed for BUILD_RESULT_* markers)
+  costUsd: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheCreationTokens: number | null;
+}
+
 /**
- * Spawn Claude Code CLI in headless mode.
+ * Spawn Claude Code CLI in headless mode with structured JSON output.
  * Pipes the prompt file to stdin (avoids shell arg length limits).
  * Requires `claude` to be installed and authenticated on the VPS.
+ *
+ * Claude Code emits a single JSON object on stdout when --output-format=json:
+ *   { type, subtype, total_cost_usd, duration_ms, result, usage: { input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens, ... } }
+ *
+ * If parsing the JSON fails (e.g. Claude Code outputs plain text on a version
+ * mismatch), we fall back to treating stdout as the assistant text and leave
+ * cost/token fields null — the build still completes successfully.
  */
-function runClaudeCode(promptPath: string, cwd: string): Promise<string> {
+function runClaudeCode(promptPath: string, cwd: string): Promise<ClaudeCodeResult> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     const errChunks: Buffer[] = [];
@@ -301,8 +324,7 @@ function runClaudeCode(promptPath: string, cwd: string): Promise<string> {
       [
         "-p",                            // Print mode (non-interactive)
         "--dangerously-skip-permissions", // No confirmation prompts
-        "--output-format", "text",       // Plain text output
-        "--verbose",
+        "--output-format", "json",       // Structured JSON output (includes cost + usage)
         "--no-session-persistence",      // Don't load/save session history (prevents stale context)
       ],
       { cwd, stdio: ["pipe", "pipe", "pipe"] },
@@ -321,9 +343,38 @@ function runClaudeCode(promptPath: string, cwd: string): Promise<string> {
 
       if (code !== 0) {
         reject(new Error(`Claude Code exited with code ${code}:\n${stderr}\n${stdout}`));
-      } else {
-        resolve(stdout);
+        return;
       }
+
+      let parsed: Record<string, unknown> | null = null;
+      try {
+        parsed = JSON.parse(stdout.trim());
+      } catch {
+        // Output wasn't JSON — fall back to raw text, no cost capture.
+        console.warn("[build-website] Claude Code output was not valid JSON; cost/token capture skipped.");
+      }
+
+      if (!parsed) {
+        resolve({
+          text: stdout,
+          costUsd: null,
+          inputTokens: null,
+          outputTokens: null,
+          cacheReadTokens: null,
+          cacheCreationTokens: null,
+        });
+        return;
+      }
+
+      const usage = (parsed.usage as Record<string, unknown> | undefined) || {};
+      resolve({
+        text: String(parsed.result ?? ""),
+        costUsd: typeof parsed.total_cost_usd === "number" ? parsed.total_cost_usd : null,
+        inputTokens: typeof usage.input_tokens === "number" ? usage.input_tokens : null,
+        outputTokens: typeof usage.output_tokens === "number" ? usage.output_tokens : null,
+        cacheReadTokens: typeof usage.cache_read_input_tokens === "number" ? usage.cache_read_input_tokens : null,
+        cacheCreationTokens: typeof usage.cache_creation_input_tokens === "number" ? usage.cache_creation_input_tokens : null,
+      });
     });
 
     child.on("error", (err) => {

@@ -16,6 +16,7 @@
 # next.js
 /.next/
 /out/
+next-env.d.ts
 
 # production
 /build
@@ -57,6 +58,7 @@ supabase/.temp/
 # local-only Claude state
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
+.claude/ralph-loop.local.md
 
 # transient build progress
 scripts/.build-progress.json

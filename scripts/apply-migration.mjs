@@ -41,6 +41,20 @@ if (!conn) {
   process.exit(1);
 }
 
+// Diagnostic: print connection info without exposing the password value
+try {
+  const u = new URL(conn);
+  const pw = u.password;
+  const charset = /^[a-zA-Z0-9]+$/.test(pw) ? "alphanumeric only"
+    : /^[a-zA-Z0-9!#$%^&*()_+=\-,.<>?]+$/.test(pw) ? "has safe specials"
+    : "has chars that may need URL encoding";
+  console.log(`Using connection: user=${u.username} host=${u.hostname} port=${u.port} db=${u.pathname.slice(1)}`);
+  console.log(`Password: length=${pw.length}, ${charset}`);
+  console.log(`First/last char of password: '${pw[0]}' / '${pw[pw.length - 1]}'`);
+} catch {
+  console.log("Connection string is not a valid URL — pg client will attempt to parse as-is.");
+}
+
 const sqlPath = process.argv[2];
 if (!sqlPath) {
   console.error("Usage: node scripts/apply-migration.mjs <path-to-sql>");

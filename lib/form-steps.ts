@@ -265,6 +265,7 @@ export const SALES_QUICK_STEPS: FormStep[] = [
     icon: "🏢",
     questions: [
       { id: "business_name", label: "What is the business name?", type: "text", required: true },
+      { id: "industry", label: "What industry / category is the business in?", type: "text", required: true, placeholder: "e.g. plumber, chiropractor, dental, HVAC, roofing", hint: "One or two words. Used to fetch industry-appropriate imagery and design references." },
       { id: "contact_email", label: "Your email (sales agent)", type: "email", required: true, hint: "We'll email you when the site is ready for review. This is your email, not the client's." },
       { id: "contact_phone", label: "Your phone number (sales agent)", type: "tel" },
       { id: "phone", label: "Phone number for the business's customers to call", type: "tel" },

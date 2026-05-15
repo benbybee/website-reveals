@@ -11,6 +11,8 @@ import { getClientByEmail, createClient, updateClient } from "@/lib/clients";
 import { sendWelcomeEmail } from "@/lib/task-emails";
 import { createTask } from "@/lib/tasks";
 import { sendTelegramMessage } from "@/lib/telegram";
+import { dispatchBuild, SiteLaunchrError } from "@/lib/sitelaunchr";
+import { buildSiteLaunchrPayload, shouldRouteToSiteLaunchr } from "@/lib/sitelaunchr-mapper";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
@@ -139,36 +141,79 @@ export async function POST(
   });
 
   // ── Queue automated website build ──────────────────────────
+  const submissionSource = (formData._source as string) || "claim-your-site";
+  const useSiteLaunchr = shouldRouteToSiteLaunchr(submissionSource);
+
   try {
     console.log("[build] Starting build queue for token:", token);
-    console.log("[build] Resolved form type:", formType);
-    const fileUrls = (session.file_urls as string[]) || [];
-    const prompt = buildPrompt(formType, formData, fileUrls);
-    console.log("[build] Prompt length:", prompt.length);
+    console.log("[build] Resolved form type:", formType, "source:", submissionSource, "→ pipeline:", useSiteLaunchr ? "sitelaunchr" : "claude-code");
 
-    // Create build job
-    const { data: buildJob, error: buildInsertErr } = await supabase
-      .from("build_jobs")
-      .insert({ token, form_type: formType })
-      .select("id")
-      .single();
+    if (useSiteLaunchr) {
+      // ── SiteLaunchr path ──
+      let slPayload;
+      try {
+        slPayload = buildSiteLaunchrPayload({
+          token,
+          formType,
+          formData,
+          callbackUrl: process.env.SITELAUNCHR_CALLBACK_URL,
+        });
+      } catch (mapErr) {
+        console.error("[build:sl] Payload build failed:", mapErr);
+        throw mapErr;
+      }
 
-    console.log("[build] Insert result:", buildJob?.id, "error:", buildInsertErr?.message);
+      const dispatch = await dispatchBuild(slPayload);
+      console.log("[build:sl] Dispatched:", dispatch.build_id, "status:", dispatch.status, "duplicate:", !!dispatch.duplicate);
 
-    if (buildJob) {
-      // Fire Trigger.dev task (non-blocking)
-      const triggerResult = await tasks.trigger("build-website", {
-        buildJobId: buildJob.id,
-        token,
-        formType,
-        prompt,
-        taskId: buildTaskId,
-      });
-      console.log("[build] Trigger result:", JSON.stringify(triggerResult));
+      const { error: buildInsertErr } = await supabase
+        .from("build_jobs")
+        .insert({
+          token,
+          form_type: formType,
+          pipeline: "sitelaunchr",
+          status: "queued",
+          external_id: token,
+          sl_build_id: dispatch.build_id,
+          sl_phase: dispatch.status,
+          sl_phase_at: new Date().toISOString(),
+        });
+
+      if (buildInsertErr) {
+        console.error("[build:sl] DB insert failed:", buildInsertErr.message);
+      }
+    } else {
+      // ── Existing Claude-Code-on-VPS path (Trigger.dev) ──
+      const fileUrls = (session.file_urls as string[]) || [];
+      const prompt = buildPrompt(formType, formData, fileUrls);
+      console.log("[build] Prompt length:", prompt.length);
+
+      const { data: buildJob, error: buildInsertErr } = await supabase
+        .from("build_jobs")
+        .insert({ token, form_type: formType, pipeline: "claude-code" })
+        .select("id")
+        .single();
+
+      console.log("[build] Insert result:", buildJob?.id, "error:", buildInsertErr?.message);
+
+      if (buildJob) {
+        const triggerResult = await tasks.trigger("build-website", {
+          buildJobId: buildJob.id,
+          token,
+          formType,
+          prompt,
+          taskId: buildTaskId,
+        });
+        console.log("[build] Trigger result:", JSON.stringify(triggerResult));
+      }
     }
   } catch (buildErr) {
     // Log but don't fail the submission — emails already sent
-    console.error("[build] Failed to queue build job:", buildErr);
+    if (buildErr instanceof SiteLaunchrError) {
+      console.error("[build:sl] Dispatch failed:", buildErr.status, buildErr.code, buildErr.message);
+    } else {
+      console.error("[build] Failed to queue build job:", buildErr);
+    }
   }
 
   // Notify admin via Telegram

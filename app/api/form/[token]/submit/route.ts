@@ -79,14 +79,73 @@ export async function POST(
 
   // Auto-create client from form submission
   let buildTaskId: string | undefined;
-  const autoCreateEmail =
+  const isSalesSubmission = submissionSource === "sales";
+  let clientId: string | undefined;
+
+  if (isSalesSubmission) {
+    // ── Sales path ──
+    // Every /sales submission represents a DIFFERENT business; the sales rep
+    // is associated via sales_rep_id, not by sharing the client.email field.
+    // We always create a fresh client per submission (no dedup by rep email),
+    // and use the business's own email if provided — or a synthetic
+    // @websitereveals.local address keyed on the token if not.
+    const businessEmail = (formData.email as string) || "";
+    const businessPhone = (formData.phone as string) || (formData.contact_phone as string) || "";
+    const slug = businessName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40);
+    const syntheticEmail = `nomail-${slug || "client"}-${token.slice(0, 8)}@websitereveals.local`;
+    const preferredEmail = businessEmail && businessEmail.includes("@") ? businessEmail : syntheticEmail;
+
+    const buildClient = async (email: string) => {
+      const { client } = await createClient({
+        first_name: businessName || "Client",
+        last_name: "",
+        company_name: businessName || "Unknown",
+        email,
+        phone: businessPhone,
+        website_url: formData.current_website as string,
+        form_session_token: token,
+        sales_rep_id: salesRepId,
+      });
+      return client;
+    };
+
+    try {
+      try {
+        const client = await buildClient(preferredEmail);
+        clientId = client.id;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // Real business email already in use → fall back to synthetic so we
+        // still get a dedicated client record per submission.
+        if (msg.toLowerCase().includes("duplicate") && preferredEmail !== syntheticEmail) {
+          console.warn(`[submit:sales] Business email ${preferredEmail} collided; using synthetic.`);
+          const client = await buildClient(syntheticEmail);
+          clientId = client.id;
+        } else {
+          throw err;
+        }
+      }
+      // Welcome email intentionally skipped for sales submissions — the rep
+      // manages the client and the synthetic email isn't deliverable anyway.
+    } catch (clientErr) {
+      console.error("[submit:sales] Client creation failed:", clientErr);
+    }
+  } else if (
     (formData.contact_email as string) ||
     (formData.email as string) ||
-    (session.email as string);
-  if (autoCreateEmail) {
+    (session.email as string)
+  ) {
+    // ── Existing non-sales path: dedup by contact_email ──
+    const autoCreateEmail =
+      (formData.contact_email as string) ||
+      (formData.email as string) ||
+      (session.email as string);
     try {
       const existingClient = await getClientByEmail(autoCreateEmail);
-      let clientId: string;
       if (!existingClient) {
         const contactName = (formData.contact_person as string) || (formData.contact_name as string) || "";
         const nameParts = contactName.split(" ");
@@ -113,23 +172,25 @@ export async function POST(
         }
         clientId = existingClient.id;
       }
-
-      // Create a task to track this website build
-      try {
-        const buildTask = await createTask({
-          client_id: clientId,
-          title: `Website Build — ${businessName}`,
-          description: `Automated website build queued from form submission.\nForm type: ${formType}`,
-          status: "backlog",
-          priority: "high",
-          tags: ["website-build", formType],
-        });
-        buildTaskId = buildTask.id;
-      } catch (taskErr) {
-        console.error("[submit] Build task creation failed:", taskErr);
-      }
     } catch (clientErr) {
       console.error("[submit] Client auto-creation failed:", clientErr);
+    }
+  }
+
+  // Create a task to track this website build (runs for both paths if we got a client)
+  if (clientId) {
+    try {
+      const buildTask = await createTask({
+        client_id: clientId,
+        title: `Website Build — ${businessName}`,
+        description: `Automated website build queued from form submission.\nForm type: ${formType}`,
+        status: "backlog",
+        priority: "high",
+        tags: ["website-build", formType],
+      });
+      buildTaskId = buildTask.id;
+    } catch (taskErr) {
+      console.error("[submit] Build task creation failed:", taskErr);
     }
   }
 

@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { Resend } from "resend";
 import { getDnsInstructions } from "@/lib/dns-instructions";
-import { tasks } from "@trigger.dev/sdk/v3";
 import { resolveFormType } from "@/lib/resolve-form-type";
-import { buildPrompt } from "@/lib/prompts";
 import { FORM_STEPS } from "@/lib/form-steps";
 import { escapeHtml } from "@/lib/sanitize";
 import { getClientByEmail, createClient, updateClient } from "@/lib/clients";
@@ -234,15 +232,17 @@ export async function POST(
     });
   }
 
-  // ── Queue automated website build ──────────────────────────
+  // ── Queue automated website build via SiteLaunchr ──────────
+  // The Claude-Code-on-VPS pipeline has been retired; SiteLaunchr is the
+  // canonical builder. If SITELAUNCHR_ENABLED isn't "1" or the source isn't
+  // in the allow list, the build_jobs row is still created (status='queued')
+  // for the admin to see, but no dispatch happens — the row will surface in
+  // the Stuck Builds widget after the threshold elapses.
   const useSiteLaunchr = shouldRouteToSiteLaunchr(submissionSource);
-
   try {
-    console.log("[build] Starting build queue for token:", token);
-    console.log("[build] Resolved form type:", formType, "source:", submissionSource, "→ pipeline:", useSiteLaunchr ? "sitelaunchr" : "claude-code");
+    console.log("[build] Queue start:", token, "form_type:", formType, "source:", submissionSource);
 
     if (useSiteLaunchr) {
-      // ── SiteLaunchr path ──
       let slPayload;
       try {
         slPayload = buildSiteLaunchrPayload({
@@ -277,32 +277,14 @@ export async function POST(
         console.error("[build:sl] DB insert failed:", buildInsertErr.message);
       }
     } else {
-      // ── Existing Claude-Code-on-VPS path (Trigger.dev) ──
-      const fileUrls = (session.file_urls as string[]) || [];
-      const prompt = buildPrompt(formType, formData, fileUrls);
-      console.log("[build] Prompt length:", prompt.length);
-
-      const { data: buildJob, error: buildInsertErr } = await supabase
+      // SL not enabled for this source — record the build_jobs row anyway
+      // so admin sees the submission queued and can manually dispatch later.
+      const { error: insertErr } = await supabase
         .from("build_jobs")
-        .insert({ token, form_type: formType, pipeline: "claude-code" })
-        .select("id")
-        .single();
-
-      console.log("[build] Insert result:", buildJob?.id, "error:", buildInsertErr?.message);
-
-      if (buildJob) {
-        const triggerResult = await tasks.trigger("build-website", {
-          buildJobId: buildJob.id,
-          token,
-          formType,
-          prompt,
-          taskId: buildTaskId,
-        });
-        console.log("[build] Trigger result:", JSON.stringify(triggerResult));
-      }
+        .insert({ token, form_type: formType, pipeline: "manual", status: "queued", task_id: buildTaskId });
+      if (insertErr) console.error("[build] manual queue insert failed:", insertErr.message);
     }
   } catch (buildErr) {
-    // Log but don't fail the submission — emails already sent
     if (buildErr instanceof SiteLaunchrError) {
       console.error("[build:sl] Dispatch failed:", buildErr.status, buildErr.code, buildErr.message);
     } else {

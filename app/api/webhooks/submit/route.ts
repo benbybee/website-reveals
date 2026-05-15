@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { Resend } from "resend";
 import { getDnsInstructions } from "@/lib/dns-instructions";
-import { tasks } from "@trigger.dev/sdk/v3";
 import { buildPrompt } from "@/lib/prompts";
 import { validateApiKey, validateOrigin, checkRateLimit, extractClientIp } from "@/lib/webhook-auth";
 import { escapeHtml } from "@/lib/sanitize";
@@ -169,27 +168,19 @@ export async function POST(req: NextRequest) {
     console.error("[webhook] Creative email failed:", emailErr);
   }
 
-  // Queue build
+  // Queue build (Claude-Code-on-VPS pipeline retired — SL wiring is a follow-up
+  // for this external webhook path. For now the build_jobs row gets created
+  // so admin can see the submission and manually dispatch later.)
+  void buildPrompt; // prompt construction reserved for SL payload wiring
   try {
-    console.log("[webhook] Starting build queue for token:", token);
-    const prompt = buildPrompt(formType, taggedFormData, []);
+    console.log("[webhook] Recording build queue for token:", token);
 
-    const { data: buildJob, error: buildInsertErr } = await supabase
+    const { error: buildInsertErr } = await supabase
       .from("build_jobs")
-      .insert({ token, form_type: formType })
-      .select("id")
-      .single();
+      .insert({ token, form_type: formType, pipeline: "manual", status: "queued" });
 
-    if (buildJob) {
-      const triggerResult = await tasks.trigger("build-website", {
-        buildJobId: buildJob.id,
-        token,
-        formType,
-        prompt,
-      });
-      console.log("[webhook] Trigger result:", JSON.stringify(triggerResult));
-    } else {
-      console.error("[webhook] Build job insert failed:", buildInsertErr?.message);
+    if (buildInsertErr) {
+      console.error("[webhook] Build job insert failed:", buildInsertErr.message);
     }
   } catch (buildErr) {
     console.error("[webhook] Failed to queue build job:", buildErr);

@@ -6,6 +6,7 @@ import { sendStatusChangeEmail } from "@/lib/task-emails";
 import { tasks as triggerTasks } from "@trigger.dev/sdk/v3";
 import type { TaskStatus } from "@/lib/types/client-tasks";
 import { isNotificationEnabled, audienceForClientId } from "@/lib/notification-settings";
+import { logAudit } from "@/lib/audit-log";
 
 export async function PUT(
   req: NextRequest,
@@ -26,12 +27,26 @@ export async function PUT(
       );
     }
 
+    const prior = await getTaskById(id);
     const task = await updateTaskStatus(
       id,
       status as TaskStatus,
       notes,
       "admin"
     );
+
+    void logAudit({
+      actor_type: "admin",
+      actor_id: auth.user?.email || null,
+      action: "task.status_changed",
+      target_type: "task",
+      target_id: id,
+      details: {
+        from: prior?.status || null,
+        to: status,
+        notes: notes || null,
+      },
+    });
 
     if (status === "complete") {
       await logTaskCompletion(task);

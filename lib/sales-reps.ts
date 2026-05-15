@@ -1,11 +1,13 @@
 import { createServerClient } from "@/lib/supabase/server";
+import { hashPin } from "@/lib/pin";
 
 export interface SalesRep {
   id: string;
   email: string;
   first_name: string;
   last_name: string | null;
-  pin: string;
+  pin: string | null;     // transient plaintext (cleared after admin views it)
+  pin_hash: string;        // authoritative
   active: boolean;
   notes: string | null;
   created_at: string;
@@ -97,6 +99,7 @@ export async function createSalesRep(input: {
 }): Promise<{ rep: SalesRep; pin: string }> {
   const supabase = createServerClient();
   const pin = generateRepPin();
+  const pin_hash = hashPin(pin);
   const { data, error } = await supabase
     .from("sales_reps")
     .insert({
@@ -104,7 +107,8 @@ export async function createSalesRep(input: {
       first_name: input.first_name.trim(),
       last_name: (input.last_name || "").trim() || null,
       notes: (input.notes || "").trim() || null,
-      pin,
+      pin,             // transient — admin sees once, can be cleared later
+      pin_hash,
       active: true,
     })
     .select("*")
@@ -136,9 +140,10 @@ export async function updateSalesRep(
 export async function resetSalesRepPin(id: string): Promise<{ rep: SalesRep; pin: string } | null> {
   const supabase = createServerClient();
   const pin = generateRepPin();
+  const pin_hash = hashPin(pin);
   const { data, error } = await supabase
     .from("sales_reps")
-    .update({ pin, updated_at: new Date().toISOString() })
+    .update({ pin, pin_hash, updated_at: new Date().toISOString() })
     .eq("id", id)
     .select("*")
     .single();

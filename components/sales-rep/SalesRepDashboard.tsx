@@ -183,11 +183,12 @@ function ClientsTab({ clients }: { clients: Client[] }) {
 }
 
 function TasksTab({ tasks }: { tasks: Task[] }) {
+  const [selected, setSelected] = useState<Task | null>(null);
+
   if (tasks.length === 0) {
     return <EmptyState message="No tasks yet. Build tasks will appear here once a submission is processed." />;
   }
 
-  // Group by status for clarity
   const byStatus: Record<string, Task[]> = {};
   for (const t of tasks) {
     (byStatus[t.status] ||= []).push(t);
@@ -196,42 +197,161 @@ function TasksTab({ tasks }: { tasks: Task[] }) {
   const order = ["backlog", "in_progress", "review", "blocked", "complete"];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      {order.map((status) => {
-        const list = byStatus[status] || [];
-        if (list.length === 0) return null;
-        return (
-          <div key={status} style={cardStyle}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
-              <span style={{ ...badgeStyle, background: STATUS_COLORS[status] || "#888886" }}>
-                {STATUS_LABELS[status] || status}
-              </span>
-              <span style={{ fontSize: "12px", color: "#888886" }}>{list.length}</span>
-            </div>
-            <table style={tableStyle}>
-              <thead>
-                <tr>
-                  <th style={th}>Title</th>
-                  <th style={th}>Client</th>
-                  <th style={th}>Updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                {list.map((t) => (
-                  <tr key={t.id}>
-                    <td style={td}>{t.title}</td>
-                    <td style={td}>{t.client?.company_name || "—"}</td>
-                    <td style={td}>{new Date(t.updated_at as string).toLocaleString()}</td>
+    <>
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {order.map((status) => {
+          const list = byStatus[status] || [];
+          if (list.length === 0) return null;
+          return (
+            <div key={status} style={cardStyle}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                <span style={{ ...badgeStyle, background: STATUS_COLORS[status] || "#888886" }}>
+                  {STATUS_LABELS[status] || status}
+                </span>
+                <span style={{ fontSize: "12px", color: "#888886" }}>{list.length}</span>
+              </div>
+              <table style={tableStyle}>
+                <thead>
+                  <tr>
+                    <th style={th}>Title</th>
+                    <th style={th}>Client</th>
+                    <th style={th}>Updated</th>
+                    <th style={th}></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {list.map((t) => (
+                    <tr key={t.id}>
+                      <td style={td}>{t.title}</td>
+                      <td style={td}>{t.client?.company_name || "—"}</td>
+                      <td style={td}>{new Date(t.updated_at as string).toLocaleString()}</td>
+                      <td style={{ ...td, textAlign: "right" }}>
+                        <button onClick={() => setSelected(t)} style={smallBtnStyle}>
+                          Comment / Request →
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })}
+      </div>
+      {selected && (
+        <CommentModal task={selected} onClose={() => setSelected(null)} />
+      )}
+    </>
+  );
+}
+
+function CommentModal({ task, onClose }: { task: Task; onClose: () => void }) {
+  const [content, setContent] = useState("");
+  const [isRequest, setIsRequest] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  async function submit() {
+    if (!content.trim()) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/sales-rep/tasks/${task.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: content.trim(), is_request: isRequest }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `${res.status}`);
+      }
+      setDone(true);
+      setTimeout(onClose, 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, background: "rgba(17,17,16,0.4)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ background: "#fff", border: "1.5px solid #e8e6df", borderRadius: "6px", padding: "28px 32px", width: "100%", maxWidth: "520px", fontFamily: "var(--font-sans)" }}
+      >
+        <h2 style={{ fontFamily: "var(--font-serif)", fontSize: "1.3rem", fontWeight: 700, marginBottom: "4px" }}>
+          {isRequest ? "Request a Change" : "Add a Comment"}
+        </h2>
+        <p style={{ fontSize: "12px", color: "#888886", marginBottom: "16px" }}>
+          {task.title} · {task.client?.company_name || "—"}
+        </p>
+
+        {done ? (
+          <div style={{ padding: "20px", textAlign: "center", color: "#2e7d32", fontSize: "14px" }}>
+            ✓ Submitted. Closing…
           </div>
-        );
-      })}
+        ) : (
+          <>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder={isRequest ? "Describe the change the client wants…" : "Add notes for the admin reviewing this build…"}
+              style={{
+                width: "100%",
+                minHeight: "120px",
+                padding: "10px 12px",
+                border: "1.5px solid #d8d6cf",
+                borderRadius: "4px",
+                fontSize: "14px",
+                fontFamily: "inherit",
+                background: "#faf9f5",
+              }}
+            />
+
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "12px", fontSize: "13px", color: "#555553", cursor: "pointer" }}>
+              <input type="checkbox" checked={isRequest} onChange={(e) => setIsRequest(e.target.checked)} />
+              Mark as <strong>change request</strong> (emails admin immediately)
+            </label>
+
+            {error && (
+              <div style={{ marginTop: "12px", padding: "10px 14px", background: "#fff5f2", border: "1px solid #ffcdc0", borderRadius: "3px", fontSize: "13px", color: "#b3300a" }}>
+                {error}
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "20px" }}>
+              <button onClick={onClose} style={btnGhost}>Cancel</button>
+              <button
+                onClick={submit}
+                disabled={submitting || !content.trim()}
+                className="btn-orange"
+                style={{ fontSize: "13px", padding: "8px 18px", opacity: submitting || !content.trim() ? 0.5 : 1 }}
+              >
+                {submitting ? "Submitting…" : "Submit"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
+
+const smallBtnStyle: React.CSSProperties = {
+  fontFamily: "var(--font-sans)",
+  fontSize: "12px",
+  color: "#ff3d00",
+  background: "transparent",
+  border: "1px solid #ffcdc0",
+  borderRadius: "3px",
+  padding: "4px 10px",
+  cursor: "pointer",
+};
 
 function EmptyState({ message }: { message: string }) {
   return (

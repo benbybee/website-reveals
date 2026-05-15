@@ -2,12 +2,14 @@
 
 import { useState, useMemo } from "react";
 import type { Client } from "@/lib/types/client-tasks";
+import type { SalesRepOption } from "./AdminShell";
 
 type SortKey = "name" | "company_name" | "email";
 type SortDir = "asc" | "desc";
 
 interface ClientsPanelProps {
   clients: Client[];
+  salesReps?: SalesRepOption[];
   onSelect: (client: Client) => void;
 }
 
@@ -21,7 +23,7 @@ const EMPTY_FORM = {
   github_repo_url: "",
 };
 
-export function ClientsPanel({ clients: initial, onSelect }: ClientsPanelProps) {
+export function ClientsPanel({ clients: initial, salesReps = [], onSelect }: ClientsPanelProps) {
   const [clients, setClients] = useState(initial);
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
@@ -31,6 +33,49 @@ export function ClientsPanel({ clients: initial, onSelect }: ClientsPanelProps) 
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [clearingAll, setClearingAll] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAssigning, setBulkAssigning] = useState(false);
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      if (prev.size === filtered.length) return new Set();
+      return new Set(filtered.map((c) => c.id));
+    });
+  };
+  const clearSelection = () => setSelectedIds(new Set());
+
+  async function bulkAssign(repId: string | null) {
+    if (selectedIds.size === 0) return;
+    const label = repId
+      ? salesReps.find((r) => r.id === repId)?.email || "selected rep"
+      : "— Unassigned —";
+    if (!confirm(`Assign ${selectedIds.size} client${selectedIds.size === 1 ? "" : "s"} to "${label}"?`)) return;
+    setBulkAssigning(true);
+    try {
+      const res = await fetch("/api/admin/clients/bulk-assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_ids: Array.from(selectedIds), sales_rep_id: repId }),
+      });
+      if (!res.ok) {
+        alert("Bulk assign failed.");
+        return;
+      }
+      // Apply locally
+      setClients((prev) => prev.map((c) => (selectedIds.has(c.id) ? { ...c, sales_rep_id: repId } : c)));
+      clearSelection();
+    } finally {
+      setBulkAssigning(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     let result = [...clients];
@@ -220,6 +265,57 @@ export function ClientsPanel({ clients: initial, onSelect }: ClientsPanelProps) 
         />
       </div>
 
+      {/* Bulk-assign toolbar (only when items are selected) */}
+      {selectedIds.size > 0 && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            padding: "10px 16px",
+            background: "#fff5f2",
+            border: "1.5px solid #ff3d00",
+            borderRadius: "4px",
+            marginBottom: "12px",
+            fontFamily: "var(--font-sans)",
+            fontSize: "13px",
+          }}
+        >
+          <span style={{ fontWeight: 600 }}>{selectedIds.size} selected</span>
+          <span style={{ color: "#888886" }}>Assign to:</span>
+          <select
+            disabled={bulkAssigning}
+            onChange={(e) => {
+              const v = e.target.value;
+              e.target.value = "";
+              bulkAssign(v === "__unassign" ? null : v);
+            }}
+            defaultValue=""
+            style={{
+              fontSize: "13px",
+              padding: "5px 10px",
+              border: "1.5px solid #e8e6df",
+              borderRadius: "3px",
+              background: "#fff",
+              minWidth: "220px",
+            }}
+          >
+            <option value="" disabled>
+              Pick a rep…
+            </option>
+            <option value="__unassign">— Unassigned —</option>
+            {salesReps.filter((r) => r.active).map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.first_name} {r.last_name || ""} ({r.email})
+              </option>
+            ))}
+          </select>
+          <button onClick={clearSelection} disabled={bulkAssigning} style={{ marginLeft: "auto", fontSize: "12px", background: "transparent", border: "none", color: "#888886", cursor: "pointer" }}>
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {/* Count */}
       <p
         style={{
@@ -245,6 +341,14 @@ export function ClientsPanel({ clients: initial, onSelect }: ClientsPanelProps) 
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ borderBottom: "1.5px solid #e8e6df" }}>
+              <th style={{ ...thStyle, width: "32px", textAlign: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                  onChange={toggleSelectAll}
+                  aria-label="Select all"
+                />
+              </th>
               {(
                 [
                   ["name", "Name"],
@@ -274,7 +378,7 @@ export function ClientsPanel({ clients: initial, onSelect }: ClientsPanelProps) 
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={7}
                   style={{
                     ...tdStyle,
                     textAlign: "center",
@@ -294,14 +398,23 @@ export function ClientsPanel({ clients: initial, onSelect }: ClientsPanelProps) 
                     borderBottom: "1px solid #f0eee8",
                     cursor: "pointer",
                     transition: "background 0.1s",
+                    background: selectedIds.has(c.id) ? "#fff5f2" : undefined,
                   }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.background = "#f5f4ef")
-                  }
-                  onMouseLeave={(e) =>
-                    (e.currentTarget.style.background = "transparent")
-                  }
+                  onMouseEnter={(e) => {
+                    if (!selectedIds.has(c.id)) e.currentTarget.style.background = "#f5f4ef";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!selectedIds.has(c.id)) e.currentTarget.style.background = "transparent";
+                  }}
                 >
+                  <td style={{ ...tdStyle, textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(c.id)}
+                      onChange={() => toggleSelected(c.id)}
+                      aria-label={`Select ${c.company_name || c.email}`}
+                    />
+                  </td>
                   <td style={tdStyle}>
                     {c.first_name} {c.last_name}
                   </td>

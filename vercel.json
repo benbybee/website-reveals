@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/reconcile-sl-builds",
+      "schedule": "0 */2 * * *"
+    }
+  ]
+}

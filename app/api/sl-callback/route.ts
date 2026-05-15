@@ -179,13 +179,13 @@ export async function POST(req: NextRequest) {
     patch.completed_at = transitionedAtIso;
     patch.sl_live_at = transitionedAtIso;
 
-    // Compute build duration & estimated cost
+    // Compute build duration & estimated cost (per form_type if env override is set)
     const startMs = job.sl_running_at
       ? new Date(job.sl_running_at).getTime()
       : new Date(job.created_at).getTime();
     const liveMs = new Date(transitionedAtIso).getTime();
     const durationMin = Math.max(1, (liveMs - startMs) / 60000);
-    patch.cost_usd = estimateBuildCost(durationMin);
+    patch.cost_usd = estimateBuildCost(durationMin, job.form_type as string | undefined);
   }
 
   if (phase === "failed" || phase === "canceled" || phase === "kura_push_failed") {

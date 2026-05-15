@@ -133,13 +133,33 @@ export async function dispatchBuild(payload: DispatchPayload): Promise<DispatchR
 
 /**
  * Compute a billable estimate that fluctuates per-build instead of being flat.
+ *
  *   cost = base × (duration_minutes / target_minutes) × jitter
- * where jitter is in [0.85, 1.15]. Clamped to [base*0.4, base*2.2] so a wild
- * outlier doesn't produce a $0.10 or $50 line item.
+ *
+ * where:
+ *   - base defaults to SITELAUNCHR_ESTIMATED_COST_USD ($4), but can be
+ *     overridden per form_type via SITELAUNCHR_COST_QUICK / _STANDARD /
+ *     _IN_DEPTH for finer accuracy as real cost data accumulates.
+ *   - jitter is in [0.85, 1.15].
+ *   - result is clamped to [base*0.4, base*2.2] so a wild outlier doesn't
+ *     produce a $0.10 or $50 line item.
  */
-export function estimateBuildCost(durationMinutes: number): number {
-  const base = Number(process.env.SITELAUNCHR_ESTIMATED_COST_USD || 4);
+export function estimateBuildCost(durationMinutes: number, formType?: string): number {
   const target = Number(process.env.SITELAUNCHR_TARGET_MINUTES || 18);
+  const defaultBase = Number(process.env.SITELAUNCHR_ESTIMATED_COST_USD || 4);
+
+  let base = defaultBase;
+  if (formType === "quick") {
+    const v = Number(process.env.SITELAUNCHR_COST_QUICK);
+    if (Number.isFinite(v) && v > 0) base = v;
+  } else if (formType === "standard") {
+    const v = Number(process.env.SITELAUNCHR_COST_STANDARD);
+    if (Number.isFinite(v) && v > 0) base = v;
+  } else if (formType === "in-depth") {
+    const v = Number(process.env.SITELAUNCHR_COST_IN_DEPTH);
+    if (Number.isFinite(v) && v > 0) base = v;
+  }
+
   if (base <= 0 || target <= 0) return 0;
 
   const safeDuration = Number.isFinite(durationMinutes) && durationMinutes > 0 ? durationMinutes : target;

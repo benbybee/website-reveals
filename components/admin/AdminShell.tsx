@@ -11,6 +11,8 @@ import { ClientDetailDrawer } from "./ClientDetailDrawer";
 import { TasksPanel } from "./TasksPanel";
 import { TaskDetailDrawer } from "./TaskDetailDrawer";
 import AddTaskModal from "./AddTaskModal";
+import { ToastProvider } from "./ToastProvider";
+import { StuckBuildsWidget } from "./StuckBuildsWidget";
 
 type Tab = "submissions" | "clients" | "tasks";
 
@@ -90,7 +92,7 @@ export function AdminShell({
   ]);
 
   return (
-    <>
+    <ToastProvider>
       {/* Header */}
       <div
         style={{
@@ -160,6 +162,21 @@ export function AdminShell({
             Notifications →
           </Link>
           <Link
+            href="/admin/audit"
+            style={{
+              fontFamily: "var(--font-sans)",
+              fontSize: "13px",
+              fontWeight: 500,
+              color: "#555553",
+              textDecoration: "none",
+              border: "1.5px solid #d8d6cf",
+              borderRadius: "3px",
+              padding: "6px 14px",
+            }}
+          >
+            Audit →
+          </Link>
+          <Link
             href="/admin/billing"
             style={{
               fontFamily: "var(--font-sans)",
@@ -203,6 +220,9 @@ export function AdminShell({
           </form>
         </div>
       </div>
+
+      {/* Stuck builds warning (only renders if any are stuck) */}
+      <StuckBuildsWidget />
 
       {/* Tabs */}
       <div
@@ -248,6 +268,7 @@ export function AdminShell({
       {activeTab === "clients" && (
         <ClientsPanel
           clients={clients}
+          salesReps={salesReps}
           onSelect={(client: Client) => setSelectedClient(client)}
         />
       )}
@@ -299,6 +320,6 @@ export function AdminShell({
           }}
         />
       )}
-    </>
+    </ToastProvider>
   );
 }

@@ -1,4 +1,5 @@
 import { createServerClient } from "@/lib/supabase/server";
+import { verifyPin } from "@/lib/pin";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { createHmac } from "crypto";
@@ -74,14 +75,14 @@ export async function authenticateSalesRep(
   const supabase = createServerClient();
   const { data: rep, error } = await supabase
     .from("sales_reps")
-    .select("id, email, pin, active")
+    .select("id, email, pin_hash, active")
     .ilike("email", email.trim())
     .maybeSingle();
 
   if (error || !rep || !rep.active) {
     return { error: "Invalid email or PIN", status: 401 };
   }
-  if (String(rep.pin).trim() !== String(pin).trim()) {
+  if (!verifyPin(String(pin).trim(), rep.pin_hash)) {
     return { error: "Invalid email or PIN", status: 401 };
   }
 

@@ -58,8 +58,9 @@ function runCmd(args, valueToStdin = null) {
     child.stderr.on("data", (d) => (stderr += d.toString()));
     child.on("close", (code) => resolve({ code, stdout, stderr }));
     if (valueToStdin !== null) {
+      // NOTE: no trailing newline — Vercel CLI captures stdin verbatim and
+      // would otherwise store the value as `actualValue\n`.
       child.stdin.write(valueToStdin);
-      child.stdin.write("\n");
     }
     child.stdin.end();
   });

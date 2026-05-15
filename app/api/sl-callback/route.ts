@@ -53,7 +53,7 @@ function phaseToStatus(phase: SlPhase): string {
 }
 
 export async function POST(req: NextRequest) {
-  const hmacSecret = process.env.SITELAUNCHR_HMAC_SECRET;
+  const hmacSecret = (process.env.SITELAUNCHR_HMAC_SECRET || "").trim();
   if (!hmacSecret) {
     console.error("[sl-callback] SITELAUNCHR_HMAC_SECRET not configured");
     return NextResponse.json({ error: "Server not configured" }, { status: 500 });

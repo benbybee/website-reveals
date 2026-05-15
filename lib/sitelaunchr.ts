@@ -79,9 +79,11 @@ export function verifyCallback(
  * Throws SiteLaunchrError on any non-2xx.
  */
 export async function dispatchBuild(payload: DispatchPayload): Promise<DispatchResult> {
-  const apiUrl = process.env.SITELAUNCHR_API_URL;
-  const apiKey = process.env.SITELAUNCHR_API_KEY;
-  const hmacSecret = process.env.SITELAUNCHR_HMAC_SECRET;
+  // .trim() to defend against env values stored with trailing whitespace
+  // (an earlier version of the push script left a \n on every value).
+  const apiUrl = (process.env.SITELAUNCHR_API_URL || "").trim();
+  const apiKey = (process.env.SITELAUNCHR_API_KEY || "").trim();
+  const hmacSecret = (process.env.SITELAUNCHR_HMAC_SECRET || "").trim();
 
   if (!apiUrl || !apiKey || !hmacSecret) {
     throw new SiteLaunchrError(500, "missing_config", "SiteLaunchr env vars are not configured");

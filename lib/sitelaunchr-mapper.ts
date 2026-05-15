@@ -92,12 +92,14 @@ export function buildSiteLaunchrPayload(args: {
  * build-website task? Gated by env so we can soft-launch on `sales` only.
  */
 export function shouldRouteToSiteLaunchr(source: string): boolean {
-  if (process.env.SITELAUNCHR_ENABLED !== "1") return false;
+  // Defensive: `.trim()` everywhere — past versions of the env-push script
+  // stored values with trailing newlines, which silently broke routing.
+  if ((process.env.SITELAUNCHR_ENABLED || "").trim() !== "1") return false;
   const sources = (process.env.SITELAUNCHR_SOURCES || "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
   // Empty allow-list = route everything when ENABLED=1
   if (sources.length === 0) return true;
-  return sources.includes(source.toLowerCase());
+  return sources.includes(source.trim().toLowerCase());
 }

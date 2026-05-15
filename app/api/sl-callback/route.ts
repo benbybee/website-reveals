@@ -5,6 +5,7 @@ import { sendTelegramMessage } from "@/lib/telegram";
 import { Resend } from "resend";
 import { getDnsInstructions } from "@/lib/dns-instructions";
 import { escapeHtml } from "@/lib/sanitize";
+import { isNotificationEnabled, audienceForSubmission } from "@/lib/notification-settings";
 
 type SlPhase =
   | "queued"
@@ -205,8 +206,15 @@ async function fireLiveCallbackSideEffects(args: {
   const dnsProvider = (session?.dns_provider as string) || "other";
   const ipAddress = process.env.AGENCY_IP_ADDRESS || "TBD";
 
+  const submissionSource = (formData._source as string) || "claim-your-site";
+  const contactAudience = audienceForSubmission(submissionSource);
+  const [contactAllowed, adminAllowed] = await Promise.all([
+    isNotificationEnabled(contactAudience),
+    isNotificationEnabled("admin"),
+  ]);
+
   // DNS-instructions email to the contact (sales agent for sales submissions)
-  if (contactEmail) {
+  if (contactEmail && contactAllowed) {
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
       const dnsHtml = getDnsInstructions(dnsProvider, ipAddress, businessName);
@@ -224,19 +232,21 @@ async function fireLiveCallbackSideEffects(args: {
     }
   }
 
-  // Telegram notification with portal URL for review
-  try {
-    const lines = [
-      `✅ SiteLaunchr Build Live — ${businessName}`,
-      ``,
-      `Site: ${site_url || "(no URL)"}`,
-    ];
-    if (wp_admin_url) lines.push(`WP admin: ${wp_admin_url}`);
-    if (kura_portal_url) lines.push(`Kura portal: ${kura_portal_url}`);
-    lines.push(``, `Review and reply to approve.`);
-    await sendTelegramMessage(lines.join("\n"));
-  } catch (tgErr) {
-    console.error("[sl-callback] Telegram failed:", tgErr);
+  // Telegram notification with portal URL for review (admin audience)
+  if (adminAllowed) {
+    try {
+      const lines = [
+        `✅ SiteLaunchr Build Live — ${businessName}`,
+        ``,
+        `Site: ${site_url || "(no URL)"}`,
+      ];
+      if (wp_admin_url) lines.push(`WP admin: ${wp_admin_url}`);
+      if (kura_portal_url) lines.push(`Kura portal: ${kura_portal_url}`);
+      lines.push(``, `Review and reply to approve.`);
+      await sendTelegramMessage(lines.join("\n"));
+    } catch (tgErr) {
+      console.error("[sl-callback] Telegram failed:", tgErr);
+    }
   }
 
   // Update task: comment with live URL, keep in_progress for manual review

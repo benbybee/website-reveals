@@ -120,6 +120,21 @@ export function AdminShell({
           style={{ display: "flex", alignItems: "center", gap: "16px" }}
         >
           <Link
+            href="/admin/notifications"
+            style={{
+              fontFamily: "var(--font-sans)",
+              fontSize: "13px",
+              fontWeight: 500,
+              color: "#555553",
+              textDecoration: "none",
+              border: "1.5px solid #d8d6cf",
+              borderRadius: "3px",
+              padding: "6px 14px",
+            }}
+          >
+            Notifications →
+          </Link>
+          <Link
             href="/admin/billing"
             style={{
               fontFamily: "var(--font-sans)",

@@ -13,6 +13,7 @@ import { createTask } from "@/lib/tasks";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { dispatchBuild, SiteLaunchrError } from "@/lib/sitelaunchr";
 import { buildSiteLaunchrPayload, shouldRouteToSiteLaunchr } from "@/lib/sitelaunchr-mapper";
+import { isNotificationEnabled, audienceForSubmission } from "@/lib/notification-settings";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
@@ -51,6 +52,12 @@ export async function POST(
   const ipAddress = process.env.AGENCY_IP_ADDRESS || "TBD";
   const dnsProvider = (session.dns_provider as string) || "other";
   const formType = resolveFormType(formData);
+  const submissionSource = (formData._source as string) || "claim-your-site";
+  const contactAudience = audienceForSubmission(submissionSource);
+  const [contactAllowed, adminAllowed] = await Promise.all([
+    isNotificationEnabled(contactAudience),
+    isNotificationEnabled("admin"),
+  ]);
 
   // Auto-create client from form submission
   let buildTaskId: string | undefined;
@@ -74,7 +81,9 @@ export async function POST(
           website_url: formData.current_website as string,
           form_session_token: token,
         });
-        await sendWelcomeEmail(client, pin);
+        if (contactAllowed) {
+          await sendWelcomeEmail(client, pin);
+        }
         clientId = client.id;
       } else {
         if (!existingClient.form_session_token) {
@@ -104,12 +113,12 @@ export async function POST(
 
   const resend = getResend();
 
-  // Email to client with DNS instructions
+  // Email to client/sales-rep with DNS instructions (gated by contact audience toggle)
   const clientEmail =
     (formData.contact_email as string) ||
     (formData.email as string) ||
     (session.email as string);
-  if (clientEmail) {
+  if (clientEmail && contactAllowed) {
     const dnsHtml = getDnsInstructions(dnsProvider, ipAddress, businessName);
     await resend.emails.send({
       from: "Website Reveals <creativemarketing@websitereveals.com>",
@@ -119,8 +128,8 @@ export async function POST(
     });
   }
 
-  // Email to agency with full submission summary
-  if (process.env.AGENCY_EMAIL) {
+  // Email to agency with full submission summary (admin audience)
+  if (process.env.AGENCY_EMAIL && adminAllowed) {
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://obsession-marketing-onboarding.vercel.app";
     const exportUrl = `${siteUrl}/api/export/${token}`;
     await resend.emails.send({
@@ -131,17 +140,18 @@ export async function POST(
     });
   }
 
-  // Notify creative@ of every form submission
-  await resend.emails.send({
-    from: "Website Reveals <creativemarketing@websitereveals.com>",
-    to: "creative@obsessionmarketing.com",
-    subject: `Form Submitted — ${escapeHtml(businessName)}`,
-    html: `<p>A new questionnaire has been submitted for <strong>${escapeHtml(businessName)}</strong>.</p>
-           <p>Form type: ${escapeHtml(formType)}<br>Contact email: ${escapeHtml((formData.contact_email as string) || "Not provided")}<br>Contact phone: ${escapeHtml((formData.contact_phone as string) || "Not provided")}<br>Business email: ${escapeHtml((formData.email as string) || "Not provided")}<br>Business phone: ${escapeHtml((formData.phone as string) || "Not provided")}</p>`,
-  });
+  // Notify creative@ of every form submission (admin audience)
+  if (adminAllowed) {
+    await resend.emails.send({
+      from: "Website Reveals <creativemarketing@websitereveals.com>",
+      to: "creative@obsessionmarketing.com",
+      subject: `Form Submitted — ${escapeHtml(businessName)}`,
+      html: `<p>A new questionnaire has been submitted for <strong>${escapeHtml(businessName)}</strong>.</p>
+             <p>Form type: ${escapeHtml(formType)}<br>Contact email: ${escapeHtml((formData.contact_email as string) || "Not provided")}<br>Contact phone: ${escapeHtml((formData.contact_phone as string) || "Not provided")}<br>Business email: ${escapeHtml((formData.email as string) || "Not provided")}<br>Business phone: ${escapeHtml((formData.phone as string) || "Not provided")}</p>`,
+    });
+  }
 
   // ── Queue automated website build ──────────────────────────
-  const submissionSource = (formData._source as string) || "claim-your-site";
   const useSiteLaunchr = shouldRouteToSiteLaunchr(submissionSource);
 
   try {
@@ -216,13 +226,15 @@ export async function POST(
     }
   }
 
-  // Notify admin via Telegram
-  try {
-    const contactEmail = (formData.contact_email as string) || (formData.email as string) || "";
-    const telegramMsg = `*New Form Submission*\nBusiness: ${businessName}\nForm type: ${formType}\nEmail: ${contactEmail}\nDNS: ${dnsProvider}`;
-    await sendTelegramMessage(telegramMsg);
-  } catch (tgErr) {
-    console.error("[submit] Telegram notification failed:", tgErr);
+  // Notify admin via Telegram (admin audience)
+  if (adminAllowed) {
+    try {
+      const contactEmail = (formData.contact_email as string) || (formData.email as string) || "";
+      const telegramMsg = `*New Form Submission*\nBusiness: ${businessName}\nForm type: ${formType}\nEmail: ${contactEmail}\nDNS: ${dnsProvider}`;
+      await sendTelegramMessage(telegramMsg);
+    } catch (tgErr) {
+      console.error("[submit] Telegram notification failed:", tgErr);
+    }
   }
 
   return NextResponse.json({ ok: true });

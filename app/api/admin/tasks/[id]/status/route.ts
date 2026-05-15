@@ -5,6 +5,7 @@ import { getClientById } from "@/lib/clients";
 import { sendStatusChangeEmail } from "@/lib/task-emails";
 import { tasks as triggerTasks } from "@trigger.dev/sdk/v3";
 import type { TaskStatus } from "@/lib/types/client-tasks";
+import { isNotificationEnabled, audienceForClientId } from "@/lib/notification-settings";
 
 export async function PUT(
   req: NextRequest,
@@ -47,15 +48,19 @@ export async function PUT(
 
     const client = await getClientById(task.client_id);
     if (client) {
-      try {
-        await sendStatusChangeEmail(
-          client,
-          task,
-          status as TaskStatus,
-          notes
-        );
-      } catch (emailErr) {
-        console.error("[admin/tasks] Status email failed:", emailErr);
+      const audience = await audienceForClientId(client.id);
+      const allowed = await isNotificationEnabled(audience);
+      if (allowed) {
+        try {
+          await sendStatusChangeEmail(
+            client,
+            task,
+            status as TaskStatus,
+            notes
+          );
+        } catch (emailErr) {
+          console.error("[admin/tasks] Status email failed:", emailErr);
+        }
       }
     }
 

@@ -272,6 +272,7 @@ export const SALES_QUICK_STEPS: FormStep[] = [
       { id: "email", label: "Email address for the business's customers", type: "email" },
       { id: "service_areas", label: "What cities or regions does the business serve?", type: "textarea" },
       { id: "contact_method", label: "How does the business prefer customers to reach them? (select all that apply)", type: "checkbox", options: ["Phone call", "Text message", "Email", "Contact form"] },
+      { id: "current_url", label: "Does the business have a current website?", type: "text", placeholder: "https://example.com", hint: "If yes, paste the URL — the builder will pull address, phone, email, and other details from it." },
     ],
   },
   {

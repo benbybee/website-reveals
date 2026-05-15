@@ -31,6 +31,7 @@
     "eslint-config-next": "16.1.6",
     "playwright": "^1.58.2",
     "tailwindcss": "^4",
+    "trigger.dev": "^4.4.2",
     "typescript": "^5"
   }
 }

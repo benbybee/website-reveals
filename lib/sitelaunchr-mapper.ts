@@ -42,6 +42,7 @@ export function buildSiteLaunchrPayload(args: {
   const businessName = str(formData, "business_name");
   const contactEmail = str(formData, "contact_email") || str(formData, "email");
   const industry = str(formData, "industry");
+  const isSalesSubmission = (formData._source as string) === "sales";
 
   const missing: string[] = [];
   if (!businessName) missing.push("business_name");
@@ -55,17 +56,34 @@ export function buildSiteLaunchrPayload(args: {
   const slFormType: "quick" | "standard" | "in-depth" =
     formType === "quick" || formType === "standard" || formType === "in-depth" ? formType : "standard";
 
+  // For /sales submissions, contact_* fields belong to the sales rep, not the
+  // client business — they must never reach the build skill or they'll land on
+  // the client site (contact page, footer, etc.). owner_email below still uses
+  // the rep's address so build-status callbacks reach them.
+  const SALES_REP_ONLY_FIELDS = new Set([
+    "contact_email",
+    "contact_phone",
+    "contact_person",
+    "contact_name",
+  ]);
+
   // Strip our internal keys; SL's mapper drops any unknown fields
   const brief: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(formData)) {
     if (k.startsWith("_")) continue;
     if (v === undefined || v === null || v === "") continue;
+    if (isSalesSubmission && SALES_REP_ONLY_FIELDS.has(k)) continue;
     brief[k] = v;
   }
   // Ensure required fields are present in `brief` even if duplicated above
   brief.business_name = businessName;
-  brief.contact_email = contactEmail;
   brief.industry = industry;
+  // contact_email belongs to the sales rep on /sales submissions, so don't
+  // forward it as a brief field — kura.owner_email still carries it for
+  // build-status callbacks.
+  if (!isSalesSubmission) {
+    brief.contact_email = contactEmail;
+  }
 
   const ownerName =
     str(formData, "contact_person") ||

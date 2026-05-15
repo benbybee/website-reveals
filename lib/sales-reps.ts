@@ -33,6 +33,48 @@ export async function listSalesReps(): Promise<SalesRep[]> {
   return (data || []) as SalesRep[];
 }
 
+export interface SalesRepClientSummary {
+  id: string;
+  first_name: string;
+  last_name: string;
+  company_name: string;
+  email: string;
+  website_url: string | null;
+  created_at: string;
+}
+
+/**
+ * Returns a map from sales_rep.id → list of clients currently assigned
+ * to that rep. Used by the admin /admin/sales-reps page to show per-rep
+ * client counts and an inline list on expand.
+ */
+export async function getClientsBySalesRep(): Promise<Record<string, SalesRepClientSummary[]>> {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("clients")
+    .select("id, first_name, last_name, company_name, email, website_url, created_at, sales_rep_id")
+    .not("sales_rep_id", "is", null)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("[sales-reps] getClientsBySalesRep failed:", error.message);
+    return {};
+  }
+  const map: Record<string, SalesRepClientSummary[]> = {};
+  for (const c of data || []) {
+    const repId = c.sales_rep_id as string;
+    (map[repId] ||= []).push({
+      id: c.id,
+      first_name: c.first_name,
+      last_name: c.last_name,
+      company_name: c.company_name,
+      email: c.email,
+      website_url: c.website_url,
+      created_at: c.created_at,
+    });
+  }
+  return map;
+}
+
 export async function getSalesRepById(id: string): Promise<SalesRep | null> {
   const supabase = createServerClient();
   const { data, error } = await supabase

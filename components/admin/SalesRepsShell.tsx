@@ -1,13 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
-import type { SalesRep } from "@/lib/sales-reps";
+import type { SalesRep, SalesRepClientSummary } from "@/lib/sales-reps";
 
-export function SalesRepsShell({ reps: initial, userEmail }: { reps: SalesRep[]; userEmail: string }) {
+export function SalesRepsShell({
+  reps: initial,
+  clientsByRep,
+  userEmail,
+}: {
+  reps: SalesRep[];
+  clientsByRep: Record<string, SalesRepClientSummary[]>;
+  userEmail: string;
+}) {
   const [reps, setReps] = useState(initial);
   const [showCreate, setShowCreate] = useState(false);
   const [pinFlash, setPinFlash] = useState<{ email: string; pin: string } | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   async function createRep(input: { email: string; first_name: string; last_name: string; notes: string }) {
     const res = await fetch("/api/admin/sales-reps", {
@@ -105,33 +114,106 @@ export function SalesRepsShell({ reps: initial, userEmail }: { reps: SalesRep[];
           <table style={tableStyle}>
             <thead>
               <tr>
+                <th style={th}></th>
                 <th style={th}>Name</th>
                 <th style={th}>Email</th>
+                <th style={{ ...th, textAlign: "right" }}>Clients</th>
                 <th style={th}>Active</th>
                 <th style={th}>Created</th>
                 <th style={th}></th>
               </tr>
             </thead>
             <tbody>
-              {reps.map((r) => (
-                <tr key={r.id}>
-                  <td style={td}>
-                    {r.first_name} {r.last_name || ""}
-                  </td>
-                  <td style={td}>{r.email}</td>
-                  <td style={td}>
-                    <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                      <input type="checkbox" checked={r.active} onChange={() => toggleActive(r)} />
-                      <span style={{ fontSize: "12px", color: r.active ? "#2e7d32" : "#888886" }}>{r.active ? "Active" : "Disabled"}</span>
-                    </label>
-                  </td>
-                  <td style={td}>{new Date(r.created_at).toLocaleDateString()}</td>
-                  <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
-                    <button onClick={() => resetPin(r)} style={btnSmall}>Reset PIN</button>
-                    <button onClick={() => deleteRep(r)} style={{ ...btnSmall, marginLeft: "8px", color: "#b3300a" }}>Delete</button>
-                  </td>
-                </tr>
-              ))}
+              {reps.map((r) => {
+                const repClients = clientsByRep[r.id] || [];
+                const isExpanded = expanded === r.id;
+                const canExpand = repClients.length > 0;
+                return (
+                  <Fragment key={r.id}>
+                    <tr
+                      onClick={() => canExpand && setExpanded(isExpanded ? null : r.id)}
+                      style={{ cursor: canExpand ? "pointer" : "default" }}
+                    >
+                      <td style={{ ...td, width: "24px", color: "#888886", fontFamily: "var(--font-mono)" }}>
+                        {canExpand ? (isExpanded ? "▾" : "▸") : ""}
+                      </td>
+                      <td style={td}>
+                        {r.first_name} {r.last_name || ""}
+                      </td>
+                      <td style={td}>{r.email}</td>
+                      <td style={{ ...td, textAlign: "right", fontWeight: 600 }}>
+                        <span
+                          style={{
+                            display: "inline-block",
+                            minWidth: "28px",
+                            padding: "2px 8px",
+                            borderRadius: "999px",
+                            background: repClients.length > 0 ? "#fff5f2" : "#f0eeea",
+                            color: repClients.length > 0 ? "#ff3d00" : "#888886",
+                            fontSize: "12px",
+                            fontFamily: "var(--font-mono)",
+                          }}
+                        >
+                          {repClients.length}
+                        </span>
+                      </td>
+                      <td style={td} onClick={(e) => e.stopPropagation()}>
+                        <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                          <input type="checkbox" checked={r.active} onChange={() => toggleActive(r)} />
+                          <span style={{ fontSize: "12px", color: r.active ? "#2e7d32" : "#888886" }}>{r.active ? "Active" : "Disabled"}</span>
+                        </label>
+                      </td>
+                      <td style={td}>{new Date(r.created_at).toLocaleDateString()}</td>
+                      <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => resetPin(r)} style={btnSmall}>Reset PIN</button>
+                        <button onClick={() => deleteRep(r)} style={{ ...btnSmall, marginLeft: "8px", color: "#b3300a" }}>Delete</button>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={7} style={{ padding: "0 12px 16px 36px", background: "#faf9f5" }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "var(--font-sans)", fontSize: "13px" }}>
+                            <thead>
+                              <tr>
+                                <th style={{ ...th, padding: "8px 12px" }}>Company</th>
+                                <th style={{ ...th, padding: "8px 12px" }}>Contact</th>
+                                <th style={{ ...th, padding: "8px 12px" }}>Email</th>
+                                <th style={{ ...th, padding: "8px 12px" }}>Site</th>
+                                <th style={{ ...th, padding: "8px 12px" }}>Created</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {repClients.map((c) => (
+                                <tr key={c.id}>
+                                  <td style={{ ...td, padding: "8px 12px" }}>{c.company_name}</td>
+                                  <td style={{ ...td, padding: "8px 12px" }}>
+                                    {c.first_name} {c.last_name}
+                                  </td>
+                                  <td style={{ ...td, padding: "8px 12px", color: c.email.endsWith("@websitereveals.local") ? "#888886" : "#111110" }}>
+                                    {c.email.endsWith("@websitereveals.local") ? <em>(no email)</em> : c.email}
+                                  </td>
+                                  <td style={{ ...td, padding: "8px 12px" }}>
+                                    {c.website_url ? (
+                                      <a href={c.website_url} target="_blank" rel="noreferrer" style={{ color: "#ff3d00", textDecoration: "none" }}>
+                                        {c.website_url.replace(/^https?:\/\//, "").slice(0, 40)}
+                                      </a>
+                                    ) : (
+                                      "—"
+                                    )}
+                                  </td>
+                                  <td style={{ ...td, padding: "8px 12px", color: "#888886", fontSize: "12px" }}>
+                                    {new Date(c.created_at).toLocaleDateString()}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         )}

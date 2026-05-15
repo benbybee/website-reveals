@@ -1,6 +1,6 @@
 import { createSSRClient } from "@/lib/supabase/server-ssr";
 import { redirect } from "next/navigation";
-import { listSalesReps } from "@/lib/sales-reps";
+import { listSalesReps, getClientsBySalesRep } from "@/lib/sales-reps";
 import { SalesRepsShell } from "@/components/admin/SalesRepsShell";
 
 export const dynamic = "force-dynamic";
@@ -16,12 +16,12 @@ export default async function SalesRepsPage() {
   } = await ssr.auth.getUser();
   if (!user) redirect("/admin/login");
 
-  const reps = await listSalesReps();
+  const [reps, clientsByRep] = await Promise.all([listSalesReps(), getClientsBySalesRep()]);
 
   return (
     <div style={{ minHeight: "100vh", background: "#faf9f5", padding: "32px 24px 80px" }}>
       <div style={{ maxWidth: "1100px", margin: "0 auto" }}>
-        <SalesRepsShell reps={reps} userEmail={user.email || ""} />
+        <SalesRepsShell reps={reps} clientsByRep={clientsByRep} userEmail={user.email || ""} />
       </div>
     </div>
   );

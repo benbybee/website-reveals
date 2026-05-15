@@ -17,6 +17,21 @@ type SlPhase =
   | "kura_push_failed"
   | "canceled";
 
+// Lifecycle ordering used to reject out-of-order callbacks.
+// SL sometimes delivers `succeeded` after `live` (or retries land in the
+// wrong order); applying them blindly walks the row backward from a
+// terminal state. Terminal phases (live/failed/canceled/kura_push_failed)
+// share the highest rank so nothing can override them.
+const PHASE_ORDER: Record<SlPhase, number> = {
+  queued: 0,
+  running: 1,
+  succeeded: 2,
+  live: 3,
+  failed: 3,
+  canceled: 3,
+  kura_push_failed: 3,
+};
+
 interface SlCallbackBody {
   build_id: string;
   external_id: string;
@@ -122,6 +137,20 @@ export async function POST(req: NextRequest) {
   // Idempotency: if we've already recorded this phase, return 200 without re-firing side effects
   if (job.sl_phase === phase) {
     return NextResponse.json({ ok: true, idempotent: true });
+  }
+
+  // Reject out-of-order callbacks that would walk the row backward
+  // (e.g. a `succeeded` arriving after we've already recorded `live`).
+  const currentRank =
+    job.sl_phase && job.sl_phase in PHASE_ORDER
+      ? PHASE_ORDER[job.sl_phase as SlPhase]
+      : -1;
+  const incomingRank = PHASE_ORDER[phase];
+  if (incomingRank < currentRank) {
+    console.log(
+      `[sl-callback] Ignoring regressive callback for ${job.id}: ${job.sl_phase} → ${phase}`,
+    );
+    return NextResponse.json({ ok: true, ignored: "phase_regression" });
   }
 
   const newStatus = phaseToStatus(phase);

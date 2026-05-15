@@ -247,6 +247,7 @@ export async function getClientTaskCounts(
   const counts: Record<TaskStatus, number> = {
     backlog: 0,
     in_progress: 0,
+    review: 0,
     blocked: 0,
     complete: 0,
   };

@@ -39,6 +39,17 @@ function portalButton(text: string): string {
   `;
 }
 
+function pinSection(client: Client): string {
+  if (!client.pin) return "";
+  return `
+    <div style="background: #ffffff; border: 1.5px solid #e8e6df; border-radius: 4px; padding: 16px 20px; margin: 24px 0 0;">
+      <p style="font-size: 11px; color: #888886; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 6px; font-weight: 600;">Your Portal PIN</p>
+      <p style="font-size: 22px; font-weight: 700; color: #ff3d00; letter-spacing: 0.2em; font-family: 'JetBrains Mono', monospace; margin: 0;">${client.pin}</p>
+      <p style="font-size: 12px; color: #888886; margin: 6px 0 0;">Log in at <a href="${BASE_URL()}/portal" style="color: #ff3d00;">${BASE_URL()}/portal</a> with your email &amp; PIN.</p>
+    </div>
+  `;
+}
+
 export async function sendWelcomeEmail(
   client: Client,
   pin: string
@@ -105,6 +116,7 @@ export async function sendTaskCreatedEmail(
         </div>
       </div>
       ${portalButton("View in Portal")}
+      ${pinSection(client)}
     `),
   });
 }
@@ -121,6 +133,10 @@ const STATUS_MESSAGES: Record<
     heading: "Work Started",
     message: "Work has begun on this task.",
   },
+  review: {
+    heading: "In Review",
+    message: "The build is complete and awaiting final review.",
+  },
   blocked: {
     heading: "Action Needed",
     message: "This task is blocked and we need something from you.",
@@ -130,6 +146,52 @@ const STATUS_MESSAGES: Record<
     message: "This task has been completed.",
   },
 };
+
+/**
+ * Notify the system admin when a task moves into the "review" stage —
+ * typically after a SiteLaunchr build goes live and the sl-callback handler
+ * auto-transitions the task. Goes to AGENCY_EMAIL (no audience gating;
+ * this is for the operator, not the client/sales-rep).
+ */
+export async function sendReviewNotificationEmail(args: {
+  taskTitle: string;
+  businessName: string;
+  siteUrl: string | null;
+  wpAdminUrl: string | null;
+  kuraPortalUrl: string | null;
+  taskId: string;
+}): Promise<void> {
+  const adminEmail = process.env.AGENCY_EMAIL;
+  if (!adminEmail) return;
+
+  const resend = getResend();
+  const baseUrl = BASE_URL();
+  const lines: string[] = [];
+  if (args.siteUrl) lines.push(`<strong>Site:</strong> <a href="${args.siteUrl}">${args.siteUrl}</a>`);
+  if (args.wpAdminUrl) lines.push(`<strong>WordPress admin:</strong> <a href="${args.wpAdminUrl}">${args.wpAdminUrl}</a>`);
+  if (args.kuraPortalUrl) lines.push(`<strong>Kura portal:</strong> <a href="${args.kuraPortalUrl}">${args.kuraPortalUrl}</a>`);
+
+  await resend.emails.send({
+    from: FROM,
+    to: adminEmail,
+    subject: `[Website Reveals] Ready for Review: ${escapeHtml(args.businessName)}`,
+    html: emailWrapper(`
+      <h2 style="font-family: Georgia, 'Playfair Display', serif; font-size: 24px; font-weight: 700; color: #111110; margin-bottom: 8px;">Ready for Review</h2>
+      <p style="color: #888886; font-size: 15px;">
+        The build for <strong>${escapeHtml(args.businessName)}</strong> finished and was moved into the Review stage.
+      </p>
+      <div style="background: #ffffff; border: 1.5px solid #e8e6df; border-radius: 4px; padding: 20px; margin: 24px 0;">
+        <h3 style="font-size: 16px; color: #111110; margin: 0 0 12px;">${escapeHtml(args.taskTitle)}</h3>
+        <p style="font-size: 13px; color: #444442; line-height: 1.6; margin: 0;">
+          ${lines.join("<br>")}
+        </p>
+      </div>
+      <a href="${baseUrl}/admin/tasks?task=${args.taskId}" style="display: inline-block; background: #ff3d00; color: #fff; padding: 13px 32px; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 3px; margin-top: 16px;">
+        Review in Admin
+      </a>
+    `),
+  });
+}
 
 export async function sendStatusChangeEmail(
   client: Client,
@@ -144,7 +206,9 @@ export async function sendStatusChangeEmail(
       ? "#ff6b35"
       : newStatus === "complete"
         ? "#4caf50"
-        : "#ff3d00";
+        : newStatus === "review"
+          ? "#7c4dff"
+          : "#ff3d00";
 
   await resend.emails.send({
     from: FROM,
@@ -161,6 +225,7 @@ export async function sendStatusChangeEmail(
         ${notes ? `<div style="margin-top: 16px; padding-top: 16px; border-top: 1.5px solid #e8e6df;"><p style="font-size: 11px; color: #888886; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; font-weight: 600;">Notes</p><p style="font-size: 14px; color: #111110; line-height: 1.5;">${escapeHtml(notes)}</p></div>` : ""}
       </div>
       ${portalButton("View in Portal")}
+      ${pinSection(client)}
     `),
   });
 }
@@ -185,6 +250,7 @@ export async function sendCommentNotificationEmail(
         </p>
       </div>
       ${portalButton("View & Reply")}
+      ${pinSection(client)}
     `),
   });
 }

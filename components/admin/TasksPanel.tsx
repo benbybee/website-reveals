@@ -30,6 +30,7 @@ type SortDir = "asc" | "desc";
 const STATUS_LABELS: Record<TaskStatus, string> = {
   backlog: "Backlog",
   in_progress: "In Progress",
+  review: "Review",
   blocked: "Blocked",
   complete: "Complete",
 };
@@ -37,6 +38,7 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
 const STATUS_COLORS: Record<TaskStatus, string> = {
   backlog: "#888886",
   in_progress: "#2196f3",
+  review: "#7c4dff",
   blocked: "#ff6b35",
   complete: "#4caf50",
 };
@@ -124,6 +126,7 @@ export function TasksPanel({
     const map: Record<TaskStatus, TaskWithClient[]> = {
       backlog: [],
       in_progress: [],
+      review: [],
       blocked: [],
       complete: [],
     };

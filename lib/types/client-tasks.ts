@@ -14,13 +14,14 @@ export interface Client {
   updated_at: string;
 }
 
-export type TaskStatus = "backlog" | "in_progress" | "blocked" | "complete";
+export type TaskStatus = "backlog" | "in_progress" | "review" | "blocked" | "complete";
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 export type AuthorType = "admin" | "client" | "system";
 
 export const TASK_STATUSES: TaskStatus[] = [
   "backlog",
   "in_progress",
+  "review",
   "blocked",
   "complete",
 ];

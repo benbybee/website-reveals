@@ -6,6 +6,7 @@ import { Resend } from "resend";
 import { getDnsInstructions } from "@/lib/dns-instructions";
 import { escapeHtml } from "@/lib/sanitize";
 import { isNotificationEnabled, audienceForSubmission } from "@/lib/notification-settings";
+import { sendReviewNotificationEmail } from "@/lib/task-emails";
 
 type SlPhase =
   | "queued"
@@ -170,8 +171,9 @@ export async function POST(req: NextRequest) {
 
   // ── Side effects on terminal success (live) ──────────────────────
   if (phase === "live" && job.sl_phase !== "live") {
-    // Fire DNS instructions email + Telegram + update task
+    // Fire DNS instructions email + Telegram + transition task to "review"
     void fireLiveCallbackSideEffects({ job, site_url, wp_admin_url, kura_portal_url });
+    void transitionTaskToReview({ job, site_url, wp_admin_url, kura_portal_url });
   }
 
   // Failure → mark task blocked
@@ -267,4 +269,86 @@ async function markTaskBlocked(job: Record<string, unknown>, errorMsg: string) {
   // Future hook for task status update; today, the build_jobs.status='failed'
   // is enough — admin UI surfaces it and Telegram already pings on side-effect path.
   console.log("[sl-callback] build failed for job", job.id, "→", errorMsg);
+}
+
+/**
+ * On `live`, auto-transition the linked task into "review" so the admin
+ * sees it as queued for approval. Fires an admin email so it's visible
+ * even without checking the dashboard.
+ */
+async function transitionTaskToReview(args: {
+  job: Record<string, unknown>;
+  site_url: string | null;
+  wp_admin_url: string | null;
+  kura_portal_url: string | null;
+}) {
+  const taskId = args.job.task_id as string | null | undefined;
+  if (!taskId) {
+    console.log("[sl-callback] No task_id on build_jobs row; skipping review transition");
+    return;
+  }
+  const supabase = createServerClient();
+  const nowIso = new Date().toISOString();
+
+  // Fetch current task for status history + business name
+  const { data: task, error: taskErr } = await supabase
+    .from("tasks")
+    .select("id, title, status, client_id")
+    .eq("id", taskId)
+    .maybeSingle();
+  if (taskErr || !task) {
+    console.warn("[sl-callback] Task not found for transition:", taskId, taskErr?.message);
+    return;
+  }
+
+  const oldStatus = task.status;
+  const { error: updErr } = await supabase
+    .from("tasks")
+    .update({ status: "review", updated_at: nowIso })
+    .eq("id", taskId);
+  if (updErr) {
+    console.error("[sl-callback] Task → review update failed:", updErr.message);
+    return;
+  }
+
+  // Log status history + system comment with the build URLs
+  await supabase.from("task_status_history").insert({
+    task_id: taskId,
+    old_status: oldStatus,
+    new_status: "review",
+    notes: "SiteLaunchr build went live — awaiting admin review.",
+    changed_by: "system",
+  });
+  const commentLines = ["Build went live — ready for review."];
+  if (args.site_url) commentLines.push(`Site: ${args.site_url}`);
+  if (args.wp_admin_url) commentLines.push(`WP admin: ${args.wp_admin_url}`);
+  if (args.kura_portal_url) commentLines.push(`Kura portal: ${args.kura_portal_url}`);
+  await supabase.from("task_comments").insert({
+    task_id: taskId,
+    author_type: "system",
+    author_name: "Build System",
+    content: commentLines.join("\n"),
+    is_request: false,
+  });
+
+  // Pull business name for the email
+  const { data: session } = await supabase
+    .from("form_sessions")
+    .select("form_data")
+    .eq("token", args.job.token as string)
+    .maybeSingle();
+  const businessName = ((session?.form_data as Record<string, unknown> | null)?.business_name as string) || "Unknown";
+
+  try {
+    await sendReviewNotificationEmail({
+      taskTitle: task.title,
+      businessName,
+      siteUrl: args.site_url,
+      wpAdminUrl: args.wp_admin_url,
+      kuraPortalUrl: args.kura_portal_url,
+      taskId,
+    });
+  } catch (emailErr) {
+    console.error("[sl-callback] Review notification email failed:", emailErr);
+  }
 }

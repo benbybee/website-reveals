@@ -10,6 +10,7 @@ const STATUS_CONFIG: Record<
   { label: string; color: string }
 > = {
   in_progress: { label: "In Progress", color: "#2196f3" },
+  review: { label: "Review", color: "#7c4dff" },
   blocked: { label: "Blocked", color: "#ff6b35" },
   backlog: { label: "Backlog", color: "#888886" },
   complete: { label: "Complete", color: "#4caf50" },
@@ -17,6 +18,7 @@ const STATUS_CONFIG: Record<
 
 const STATUS_ORDER: TaskStatus[] = [
   "in_progress",
+  "review",
   "blocked",
   "backlog",
   "complete",
@@ -34,6 +36,7 @@ export default async function PortalTasksPage() {
   // Group tasks by status
   const grouped: Record<TaskStatus, Task[]> = {
     in_progress: [],
+    review: [],
     blocked: [],
     backlog: [],
     complete: [],

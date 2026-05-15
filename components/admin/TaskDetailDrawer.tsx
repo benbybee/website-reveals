@@ -101,6 +101,7 @@ const smallBtnStyle: React.CSSProperties = {
 const statusColors: Record<TaskStatus, string> = {
   backlog: "#888886",
   in_progress: "#2196f3",
+  review: "#7c4dff",
   blocked: "#e53935",
   complete: "#43a047",
 };

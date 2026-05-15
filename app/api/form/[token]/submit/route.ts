@@ -41,18 +41,36 @@ export async function POST(
     return NextResponse.json({ ok: true });
   }
 
-  // Mark as submitted
-  await supabase
-    .from("form_sessions")
-    .update({ submitted_at: new Date().toISOString() })
-    .eq("token", token);
-
   const formData = (session.form_data as Record<string, unknown>) || {};
   const businessName = (formData.business_name as string) || "Your Business";
   const ipAddress = process.env.AGENCY_IP_ADDRESS || "TBD";
   const dnsProvider = (session.dns_provider as string) || "other";
   const formType = resolveFormType(formData);
   const submissionSource = (formData._source as string) || "claim-your-site";
+
+  // Link sales rep if /sales submission AND contact_email matches an active rep
+  let salesRepId: string | null = null;
+  if (submissionSource === "sales") {
+    const repEmail = (formData.contact_email as string) || "";
+    if (repEmail) {
+      const { data: rep } = await supabase
+        .from("sales_reps")
+        .select("id")
+        .ilike("email", repEmail)
+        .eq("active", true)
+        .maybeSingle();
+      salesRepId = rep?.id || null;
+    }
+  }
+
+  // Mark as submitted + attach sales rep if applicable
+  await supabase
+    .from("form_sessions")
+    .update({
+      submitted_at: new Date().toISOString(),
+      ...(salesRepId ? { sales_rep_id: salesRepId } : {}),
+    })
+    .eq("token", token);
   const contactAudience = audienceForSubmission(submissionSource);
   const [contactAllowed, adminAllowed] = await Promise.all([
     isNotificationEnabled(contactAudience),
@@ -187,6 +205,7 @@ export async function POST(
           sl_build_id: dispatch.build_id,
           sl_phase: dispatch.status,
           sl_phase_at: new Date().toISOString(),
+          task_id: buildTaskId,
         });
 
       if (buildInsertErr) {

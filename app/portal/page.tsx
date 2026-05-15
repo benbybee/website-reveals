@@ -10,6 +10,7 @@ const STATUS_CONFIG: Record<
 > = {
   backlog: { label: "Backlog", color: "#888886" },
   in_progress: { label: "In Progress", color: "#2196f3" },
+  review: { label: "Review", color: "#7c4dff" },
   blocked: { label: "Blocked", color: "#ff6b35" },
   complete: { label: "Complete", color: "#4caf50" },
 };
@@ -17,6 +18,7 @@ const STATUS_CONFIG: Record<
 const STATUS_ORDER: TaskStatus[] = [
   "backlog",
   "in_progress",
+  "review",
   "blocked",
   "complete",
 ];

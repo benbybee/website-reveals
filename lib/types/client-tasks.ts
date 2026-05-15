@@ -10,6 +10,7 @@ export interface Client {
   pin_hash: string;
   pin: string | null;
   form_session_token: string | null;
+  sales_rep_id: string | null;
   created_at: string;
   updated_at: string;
 }

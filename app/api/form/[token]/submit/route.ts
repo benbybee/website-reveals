@@ -98,14 +98,18 @@ export async function POST(
           phone: (formData.contact_phone as string) || (formData.phone as string),
           website_url: formData.current_website as string,
           form_session_token: token,
+          sales_rep_id: salesRepId,
         });
         if (contactAllowed) {
           await sendWelcomeEmail(client, pin);
         }
         clientId = client.id;
       } else {
-        if (!existingClient.form_session_token) {
-          await updateClient(existingClient.id, { form_session_token: token });
+        const patch: Record<string, unknown> = {};
+        if (!existingClient.form_session_token) patch.form_session_token = token;
+        if (!existingClient.sales_rep_id && salesRepId) patch.sales_rep_id = salesRepId;
+        if (Object.keys(patch).length > 0) {
+          await updateClient(existingClient.id, patch);
         }
         clientId = existingClient.id;
       }

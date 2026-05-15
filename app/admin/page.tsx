@@ -3,6 +3,7 @@ import { createSSRClient } from "@/lib/supabase/server-ssr";
 import { AdminShell } from "@/components/admin/AdminShell";
 import type { FormSession } from "@/lib/supabase/types";
 import type { Client, TaskWithClient } from "@/lib/types/client-tasks";
+import { listSalesReps } from "@/lib/sales-reps";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export default async function AdminPage() {
     data: { user },
   } = await ssrClient.auth.getUser();
 
-  const [sessionsRes, clientsRes, tasksRes] = await Promise.all([
+  const [sessionsRes, clientsRes, tasksRes, salesReps] = await Promise.all([
     supabase
       .from("form_sessions")
       .select("*")
@@ -35,6 +36,7 @@ export default async function AdminPage() {
       .is("parent_task_id", null)
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: false }),
+    listSalesReps(),
   ]);
 
   if (sessionsRes.error)
@@ -57,6 +59,7 @@ export default async function AdminPage() {
           sessions={(sessionsRes.data as FormSession[]) || []}
           clients={(clientsRes.data as Client[]) || []}
           tasks={(tasksRes.data as TaskWithClient[]) || []}
+          salesReps={salesReps.map((r) => ({ id: r.id, first_name: r.first_name, last_name: r.last_name, email: r.email, active: r.active }))}
           userEmail={user?.email || ""}
         />
       </div>

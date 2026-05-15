@@ -20,15 +20,25 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "tasks", label: "Tasks" },
 ];
 
+export type SalesRepOption = {
+  id: string;
+  first_name: string;
+  last_name: string | null;
+  email: string;
+  active: boolean;
+};
+
 export function AdminShell({
   sessions: initialSessions,
   clients: initialClients,
   tasks: initialTasks,
+  salesReps,
   userEmail,
 }: {
   sessions: FormSession[];
   clients: Client[];
   tasks: TaskWithClient[];
+  salesReps: SalesRepOption[];
   userEmail: string;
 }) {
   const [activeTab, setActiveTab] = useState<Tab>("submissions");
@@ -257,6 +267,7 @@ export function AdminShell({
       {/* Drawers */}
       <ClientDetailDrawer
         client={selectedClient}
+        salesReps={salesReps}
         onClose={() => setSelectedClient(null)}
         onUpdated={(updated) => {
           setClients((prev) =>

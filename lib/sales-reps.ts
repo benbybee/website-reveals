@@ -118,48 +118,61 @@ export async function deleteSalesRep(id: string): Promise<boolean> {
 }
 
 /**
- * Scoped dashboard fetch: form_sessions submitted by this rep, plus
- * the linked clients and tasks. Used by the sales-rep dashboard page.
+ * Scoped dashboard fetch for a sales rep:
+ *   - clients explicitly assigned to this rep (clients.sales_rep_id = repId)
+ *   - tasks for those clients
+ *   - submissions (form_sessions) tied to those clients via form_session_token,
+ *     plus any form_sessions historically tagged with sales_rep_id = repId
+ *     (so old submissions appear even if a client record was never created)
+ *
+ * Authority of truth is `clients.sales_rep_id` — admin can reassign via the
+ * client detail drawer and the rep dashboard updates accordingly.
  */
 export async function getDashboardDataForRep(repId: string) {
   const supabase = createServerClient();
 
-  const { data: sessions } = await supabase
-    .from("form_sessions")
-    .select("token, email, form_data, dns_provider, submitted_at, created_at")
+  const { data: clientRows } = await supabase
+    .from("clients")
+    .select(
+      "id, first_name, last_name, company_name, email, form_session_token, website_url, created_at",
+    )
     .eq("sales_rep_id", repId)
-    .not("submitted_at", "is", null)
-    .order("submitted_at", { ascending: false });
+    .order("created_at", { ascending: false });
+  const clients = clientRows || [];
+  const clientIds = clients.map((c) => c.id as string);
+  const clientTokens = clients
+    .map((c) => c.form_session_token as string | null)
+    .filter((t): t is string => Boolean(t));
 
-  const tokens = (sessions || []).map((s) => s.token);
-
-  // Tasks linked to clients whose form_session_token matches our tokens
-  let tasks: Array<Record<string, unknown>> = [];
-  let clients: Array<Record<string, unknown>> = [];
-  if (tokens.length > 0) {
-    const { data: clientRows } = await supabase
-      .from("clients")
-      .select("id, first_name, last_name, company_name, email, form_session_token, website_url, created_at")
-      .in("form_session_token", tokens);
-    clients = clientRows || [];
-
-    const clientIds = clients.map((c) => c.id as string);
-    if (clientIds.length > 0) {
-      const { data: taskRows } = await supabase
-        .from("tasks")
-        .select(
-          "*, client:clients(id, first_name, last_name, company_name, email)"
-        )
-        .in("client_id", clientIds)
-        .is("parent_task_id", null)
-        .order("created_at", { ascending: false });
-      tasks = taskRows || [];
+  // Sessions either linked via client.form_session_token OR tagged historically with sales_rep_id
+  let sessions: Array<Record<string, unknown>> = [];
+  {
+    const tokensInQuotes = clientTokens.length > 0;
+    const orParts: string[] = [`sales_rep_id.eq.${repId}`];
+    if (tokensInQuotes) {
+      orParts.push(`token.in.(${clientTokens.join(",")})`);
     }
+    const { data: sessionRows } = await supabase
+      .from("form_sessions")
+      .select("token, email, form_data, dns_provider, submitted_at, created_at")
+      .or(orParts.join(","))
+      .not("submitted_at", "is", null)
+      .order("submitted_at", { ascending: false });
+    sessions = sessionRows || [];
   }
 
-  return {
-    sessions: sessions || [],
-    clients,
-    tasks,
-  };
+  let tasks: Array<Record<string, unknown>> = [];
+  if (clientIds.length > 0) {
+    const { data: taskRows } = await supabase
+      .from("tasks")
+      .select(
+        "*, client:clients(id, first_name, last_name, company_name, email)",
+      )
+      .in("client_id", clientIds)
+      .is("parent_task_id", null)
+      .order("created_at", { ascending: false });
+    tasks = taskRows || [];
+  }
+
+  return { sessions, clients, tasks };
 }

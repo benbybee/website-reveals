@@ -3,8 +3,17 @@
 import { useEffect, useState } from "react";
 import type { Client } from "@/lib/types/client-tasks";
 
+type SalesRepOption = {
+  id: string;
+  first_name: string;
+  last_name: string | null;
+  email: string;
+  active: boolean;
+};
+
 interface ClientDetailDrawerProps {
   client: Client | null;
+  salesReps?: SalesRepOption[];
   onClose: () => void;
   onUpdated: (client: Client) => void;
   onDeleted?: (id: string) => void;
@@ -12,10 +21,12 @@ interface ClientDetailDrawerProps {
 
 export function ClientDetailDrawer({
   client,
+  salesReps = [],
   onClose,
   onUpdated,
   onDeleted,
 }: ClientDetailDrawerProps) {
+  const [assigningRep, setAssigningRep] = useState(false);
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -386,6 +397,57 @@ export function ClientDetailDrawer({
                   }
                 />
               )}
+            </Section>
+
+            {/* Sales Rep Assignment */}
+            <Section title="Sales Rep">
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                <select
+                  value={client.sales_rep_id || ""}
+                  disabled={assigningRep}
+                  onChange={async (e) => {
+                    const next = e.target.value || null;
+                    setAssigningRep(true);
+                    setErrorMsg(null);
+                    try {
+                      const res = await fetch(`/api/admin/clients/${client.id}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ sales_rep_id: next }),
+                      });
+                      if (!res.ok) throw new Error("Failed to update assignment");
+                      const updated = await res.json();
+                      // updateClient returns { client } or the client directly — handle both
+                      const newClient = (updated.client || updated) as Client;
+                      onUpdated(newClient);
+                    } catch {
+                      setErrorMsg("Failed to update sales rep assignment.");
+                    } finally {
+                      setAssigningRep(false);
+                    }
+                  }}
+                  style={{
+                    fontFamily: "var(--font-sans)",
+                    fontSize: "13px",
+                    padding: "6px 10px",
+                    border: "1.5px solid #e8e6df",
+                    borderRadius: "4px",
+                    background: "#faf9f5",
+                    minWidth: "220px",
+                  }}
+                >
+                  <option value="">— Unassigned —</option>
+                  {salesReps.filter((r) => r.active || r.id === client.sales_rep_id).map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.first_name} {r.last_name || ""} ({r.email}){!r.active ? " · inactive" : ""}
+                    </option>
+                  ))}
+                </select>
+                {assigningRep && <span style={{ fontSize: "12px", color: "#888886" }}>Saving…</span>}
+              </div>
+              <p style={{ fontSize: "11px", color: "#888886", marginTop: "8px" }}>
+                The assigned rep sees this client in their /sales-rep dashboard.
+              </p>
             </Section>
 
             {/* PIN Section */}

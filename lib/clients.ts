@@ -11,6 +11,7 @@ export async function createClient(data: {
   website_url?: string;
   github_repo_url?: string;
   form_session_token?: string;
+  sales_rep_id?: string | null;
 }): Promise<{ client: Client; pin: string }> {
   const supabase = createServerClient();
   const pin = generatePin();
@@ -29,6 +30,7 @@ export async function createClient(data: {
       website_url: data.website_url || null,
       github_repo_url: data.github_repo_url || null,
       form_session_token: data.form_session_token || null,
+      sales_rep_id: data.sales_rep_id ?? null,
     })
     .select()
     .single();

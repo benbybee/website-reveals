@@ -56,33 +56,25 @@ export function buildSiteLaunchrPayload(args: {
   const slFormType: "quick" | "standard" | "in-depth" =
     formType === "quick" || formType === "standard" || formType === "in-depth" ? formType : "standard";
 
-  // For /sales submissions, contact_* fields belong to the sales rep, not the
-  // client business — they must never reach the build skill or they'll land on
-  // the client site (contact page, footer, etc.). owner_email below still uses
-  // the rep's address so build-status callbacks reach them.
-  const SALES_REP_ONLY_FIELDS = new Set([
-    "contact_email",
-    "contact_phone",
-    "contact_person",
-    "contact_name",
-  ]);
-
-  // Strip our internal keys; SL's mapper drops any unknown fields
+  // Strip our internal keys; SL's mapper drops any unknown fields.
+  // We forward all contact_* fields as-is; for /sales submissions the contact
+  // belongs to the rep, not the client, and SL is responsible for not surfacing
+  // those values on the client's built site. The is_sales_submission flag
+  // below gives SL the signal it needs to know the brief came in via /sales.
   const brief: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(formData)) {
     if (k.startsWith("_")) continue;
     if (v === undefined || v === null || v === "") continue;
-    if (isSalesSubmission && SALES_REP_ONLY_FIELDS.has(k)) continue;
     brief[k] = v;
   }
   // Ensure required fields are present in `brief` even if duplicated above
   brief.business_name = businessName;
   brief.industry = industry;
-  // contact_email belongs to the sales rep on /sales submissions, so don't
-  // forward it as a brief field — kura.owner_email still carries it for
-  // build-status callbacks.
-  if (!isSalesSubmission) {
-    brief.contact_email = contactEmail;
+  brief.contact_email = contactEmail;
+  // Flag for SL's mapper so it knows contact_* is rep-owned, not client-owned.
+  // (SL will drop the field server-side if its schema doesn't list it.)
+  if (isSalesSubmission) {
+    brief.is_sales_rep_submission = true;
   }
 
   const ownerName =

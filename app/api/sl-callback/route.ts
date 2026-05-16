@@ -198,19 +198,119 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "update_failed" }, { status: 500 });
   }
 
-  // ── Side effects on terminal success (live) ──────────────────────
-  if (phase === "live" && job.sl_phase !== "live") {
-    // Fire DNS instructions email + Telegram + transition task to "review"
-    void fireLiveCallbackSideEffects({ job, site_url, wp_admin_url, kura_portal_url });
-    void transitionTaskToReview({ job, site_url, wp_admin_url, kura_portal_url });
+  // ── Side effects ─────────────────────────────────────────────────
+  // Awaited (not `void`) so they complete before the serverless function
+  // returns. The whole block is wrapped in try/catch so a single side-effect
+  // failure can't 5xx back to SL and trigger a retry.
+
+  // Build started → move task backlog → in_progress
+  if (phase === "running" && job.sl_phase !== "running") {
+    try {
+      await transitionTaskTo("in_progress", {
+        taskId: job.task_id as string | null,
+        trigger: "sl.running",
+        note: "SiteLaunchr build started.",
+      });
+    } catch (err) {
+      console.error("[sl-callback] in_progress transition failed:", err);
+    }
   }
 
-  // Failure → mark task blocked
+  // Build live → DNS email + Telegram + move task to review
+  if (phase === "live" && job.sl_phase !== "live") {
+    try {
+      await fireLiveCallbackSideEffects({ job, site_url, wp_admin_url, kura_portal_url });
+    } catch (err) {
+      console.error("[sl-callback] live side effects failed:", err);
+    }
+    try {
+      await transitionTaskToReview({ job, site_url, wp_admin_url, kura_portal_url });
+    } catch (err) {
+      console.error("[sl-callback] review transition failed:", err);
+    }
+  }
+
+  // Failure → flag task blocked
   if ((phase === "failed" || phase === "canceled") && job.sl_phase !== phase) {
-    void markTaskBlocked(job, error_message || `Build ${phase}`);
+    try {
+      await transitionTaskTo("blocked", {
+        taskId: job.task_id as string | null,
+        trigger: `sl.${phase}`,
+        note: error_message ? `Build ${phase}: ${error_message.slice(0, 300)}` : `Build ${phase}`,
+      });
+    } catch (err) {
+      console.error("[sl-callback] blocked transition failed:", err);
+    }
   }
 
   return NextResponse.json({ ok: true });
+}
+
+/**
+ * Generic forward-only task status transition. Refuses to walk a task
+ * backward (e.g. won't downgrade complete → in_progress) so an out-of-order
+ * callback can't undo admin work. Idempotent — same-status no-ops.
+ */
+const FORWARD_RANK: Record<string, number> = {
+  backlog: 0,
+  in_progress: 1,
+  review: 2,
+  blocked: 2,    // blocked is parallel to review (terminal-ish)
+  complete: 3,
+};
+async function transitionTaskTo(
+  targetStatus: "in_progress" | "review" | "blocked",
+  opts: { taskId: string | null; trigger: string; note: string },
+) {
+  if (!opts.taskId) {
+    console.log(`[sl-callback] No task_id; skipping ${targetStatus} transition`);
+    return;
+  }
+  const supabase = createServerClient();
+  const { data: task, error: taskErr } = await supabase
+    .from("tasks")
+    .select("id, title, status, client_id")
+    .eq("id", opts.taskId)
+    .maybeSingle();
+  if (taskErr || !task) {
+    console.warn(`[sl-callback] Task not found for ${targetStatus}:`, opts.taskId);
+    return;
+  }
+  const currentRank = FORWARD_RANK[task.status as string] ?? 0;
+  const targetRank = FORWARD_RANK[targetStatus];
+  if (currentRank > targetRank) {
+    console.log(`[sl-callback] Task ${opts.taskId.slice(0, 8)} is ${task.status} (rank ${currentRank}); won't downgrade to ${targetStatus} (rank ${targetRank})`);
+    return;
+  }
+  if (task.status === targetStatus) return; // idempotent
+
+  const nowIso = new Date().toISOString();
+  const { error: updErr } = await supabase
+    .from("tasks")
+    .update({ status: targetStatus, updated_at: nowIso })
+    .eq("id", opts.taskId);
+  if (updErr) {
+    console.error(`[sl-callback] Task update to ${targetStatus} failed:`, updErr.message);
+    return;
+  }
+  await supabase.from("task_status_history").insert({
+    task_id: opts.taskId,
+    old_status: task.status,
+    new_status: targetStatus,
+    notes: opts.note,
+    changed_by: "system",
+  });
+  await import("@/lib/audit-log").then(({ logAudit }) =>
+    logAudit({
+      actor_type: "sl",
+      actor_id: opts.trigger,
+      action: "task.auto_transitioned",
+      target_type: "task",
+      target_id: opts.taskId!,
+      details: { from: task.status, to: targetStatus, trigger: opts.trigger },
+    }),
+  );
+  console.log(`[sl-callback] Task ${opts.taskId.slice(0, 8)} ${task.status} → ${targetStatus} (${opts.trigger})`);
 }
 
 async function fireLiveCallbackSideEffects(args: {
@@ -294,16 +394,11 @@ async function fireLiveCallbackSideEffects(args: {
   // applies via the existing admin UI on the related task row.
 }
 
-async function markTaskBlocked(job: Record<string, unknown>, errorMsg: string) {
-  // Future hook for task status update; today, the build_jobs.status='failed'
-  // is enough — admin UI surfaces it and Telegram already pings on side-effect path.
-  console.log("[sl-callback] build failed for job", job.id, "→", errorMsg);
-}
-
 /**
- * On `live`, auto-transition the linked task into "review" so the admin
- * sees it as queued for approval. Fires an admin email so it's visible
- * even without checking the dashboard.
+ * On `live`, auto-transition the linked task into "review" (via the
+ * forward-only transitionTaskTo helper), attach a system comment with the
+ * build URLs, and email the admin so they can review without checking the
+ * dashboard.
  */
 async function transitionTaskToReview(args: {
   job: Record<string, unknown>;
@@ -317,37 +412,22 @@ async function transitionTaskToReview(args: {
     return;
   }
   const supabase = createServerClient();
-  const nowIso = new Date().toISOString();
 
-  // Fetch current task for status history + business name
-  const { data: task, error: taskErr } = await supabase
+  // Forward-only transition (won't downgrade a manually-completed task)
+  await transitionTaskTo("review", {
+    taskId,
+    trigger: "sl.live",
+    note: "SiteLaunchr build went live — awaiting admin review.",
+  });
+
+  // Fetch task for email + comment context
+  const { data: task } = await supabase
     .from("tasks")
     .select("id, title, status, client_id")
     .eq("id", taskId)
     .maybeSingle();
-  if (taskErr || !task) {
-    console.warn("[sl-callback] Task not found for transition:", taskId, taskErr?.message);
-    return;
-  }
+  if (!task) return;
 
-  const oldStatus = task.status;
-  const { error: updErr } = await supabase
-    .from("tasks")
-    .update({ status: "review", updated_at: nowIso })
-    .eq("id", taskId);
-  if (updErr) {
-    console.error("[sl-callback] Task → review update failed:", updErr.message);
-    return;
-  }
-
-  // Log status history + system comment with the build URLs
-  await supabase.from("task_status_history").insert({
-    task_id: taskId,
-    old_status: oldStatus,
-    new_status: "review",
-    notes: "SiteLaunchr build went live — awaiting admin review.",
-    changed_by: "system",
-  });
   const commentLines = ["Build went live — ready for review."];
   if (args.site_url) commentLines.push(`Site: ${args.site_url}`);
   if (args.wp_admin_url) commentLines.push(`WP admin: ${args.wp_admin_url}`);

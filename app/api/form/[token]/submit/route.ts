@@ -12,6 +12,7 @@ import { sendTelegramMessage } from "@/lib/telegram";
 import { dispatchBuild, SiteLaunchrError } from "@/lib/sitelaunchr";
 import { buildSiteLaunchrPayload, shouldRouteToSiteLaunchr } from "@/lib/sitelaunchr-mapper";
 import { isNotificationEnabled, audienceForSubmission } from "@/lib/notification-settings";
+import { notifyDispatchr, buildBriefPreview } from "@/lib/dispatchr-webhook";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
@@ -302,6 +303,17 @@ export async function POST(
       console.error("[submit] Telegram notification failed:", tgErr);
     }
   }
+
+  // Fire Dispatchr submission.new — fire-and-forget, never blocks the response
+  await notifyDispatchr({
+    type: "submission.new",
+    token,
+    businessName,
+    contactEmail: (formData.contact_email as string) || (formData.email as string) || null,
+    source: submissionSource,
+    formType,
+    briefPreview: buildBriefPreview(formData),
+  });
 
   return NextResponse.json({ ok: true });
 }

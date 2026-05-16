@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { notifyDispatchr } from "@/lib/dispatchr-webhook";
 
 const SOURCE_ID = "wr";
 
@@ -120,7 +121,21 @@ export async function dispatchBuild(payload: DispatchPayload): Promise<DispatchR
     if (!buildId || !status) {
       throw new SiteLaunchrError(res.status, "bad_response", `SiteLaunchr response missing build_id/status: ${responseText}`);
     }
-    return { build_id: buildId, status, duplicate: parsed.duplicate as boolean | undefined };
+    const duplicate = parsed.duplicate as boolean | undefined;
+
+    // Fire Dispatchr build.dispatched — only on a fresh dispatch, not on
+    // SL's idempotent duplicate response.
+    if (!duplicate) {
+      const briefBusinessName = (payload.brief?.business_name as string) || "Unknown";
+      await notifyDispatchr({
+        type: "build.dispatched",
+        token: payload.external_id,
+        businessName: briefBusinessName,
+        buildId,
+      });
+    }
+
+    return { build_id: buildId, status, duplicate };
   }
 
   const code = (parsed.error as string) || `http_${res.status}`;

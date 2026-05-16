@@ -1,5 +1,18 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Outbound integrations
+
+- **SiteLaunchr** — HMAC-signed POST to `joinsitelaunchr.com/api/builds` for every
+  `/sales` submission. See [lib/sitelaunchr.ts](lib/sitelaunchr.ts).
+- **Dispatchr** — fire-and-forget observability webhook. Six events
+  (`submission.new`, `build.dispatched`, `build.live`, `build.failed`,
+  `build.stuck`, `submission.abandoned`) sent to
+  `joindispatchr.com/api/webhooks/websitereveals` whenever
+  `WEBSITEREVEALS_DISPATCHR_WEBHOOK_URL` + `WEBSITEREVEALS_DISPATCHR_WEBHOOK_SECRET`
+  are configured. Helper: [lib/dispatchr-webhook.ts](lib/dispatchr-webhook.ts).
+- **Resend** — transactional email (DNS instructions, welcome, status changes).
+- **Telegram** — admin alerts on submission + live + build review.
+
 ## Getting Started
 
 First, run the development server:

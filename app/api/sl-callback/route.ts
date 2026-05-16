@@ -7,6 +7,7 @@ import { getDnsInstructions } from "@/lib/dns-instructions";
 import { escapeHtml } from "@/lib/sanitize";
 import { isNotificationEnabled, audienceForSubmission } from "@/lib/notification-settings";
 import { sendReviewNotificationEmail } from "@/lib/task-emails";
+import { notifyDispatchr } from "@/lib/dispatchr-webhook";
 
 type SlPhase =
   | "queued"
@@ -216,7 +217,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Build live → DNS email + Telegram + move task to review
+  // Build live → DNS email + Telegram + move task to review + Dispatchr event
   if (phase === "live" && job.sl_phase !== "live") {
     try {
       await fireLiveCallbackSideEffects({ job, site_url, wp_admin_url, kura_portal_url });
@@ -228,10 +229,19 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       console.error("[sl-callback] review transition failed:", err);
     }
+    const businessNameForEvent = await loadBusinessNameForToken(job.token as string);
+    await notifyDispatchr({
+      type: "build.live",
+      token: job.token as string,
+      businessName: businessNameForEvent,
+      siteUrl: site_url,
+      kuraPortalUrl: kura_portal_url,
+    });
   }
 
-  // Failure → flag task blocked
-  if ((phase === "failed" || phase === "canceled") && job.sl_phase !== phase) {
+  // Failure → flag task blocked + Dispatchr event
+  const FAILED_PHASES: SlPhase[] = ["failed", "canceled", "kura_push_failed"];
+  if (FAILED_PHASES.includes(phase) && job.sl_phase !== phase) {
     try {
       await transitionTaskTo("blocked", {
         taskId: job.task_id as string | null,
@@ -241,9 +251,35 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       console.error("[sl-callback] blocked transition failed:", err);
     }
+    const businessNameForEvent = await loadBusinessNameForToken(job.token as string);
+    await notifyDispatchr({
+      type: "build.failed",
+      token: job.token as string,
+      businessName: businessNameForEvent,
+      errorMessage: error_message || `Build ${phase}`,
+    });
   }
 
   return NextResponse.json({ ok: true });
+}
+
+/**
+ * Shared helper for Dispatchr events that need a human-readable business
+ * name. Reads form_data.business_name from the linked form_session, falling
+ * back to "Unknown" if missing.
+ */
+async function loadBusinessNameForToken(token: string): Promise<string> {
+  try {
+    const supabase = createServerClient();
+    const { data } = await supabase
+      .from("form_sessions")
+      .select("form_data")
+      .eq("token", token)
+      .maybeSingle();
+    return ((data?.form_data as Record<string, unknown> | null)?.business_name as string) || "Unknown";
+  } catch {
+    return "Unknown";
+  }
 }
 
 /**

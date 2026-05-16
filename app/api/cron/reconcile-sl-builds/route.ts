@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { logAudit } from "@/lib/audit-log";
+import { notifyDispatchr } from "@/lib/dispatchr-webhook";
 
 const STUCK_AFTER_MIN = 120; // 2h
 
@@ -74,11 +75,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "update_failed" }, { status: 500 });
   }
 
-  // Audit + alert
+  // Audit + Dispatchr alert per stuck build
   for (const job of stuck) {
     const fd =
       ((job.form_sessions as { form_data?: Record<string, unknown> } | null)?.form_data) || {};
-    const businessName = (fd.business_name as string) || job.token;
+    const businessName = (fd.business_name as string) || (job.token as string);
     void logAudit({
       actor_type: "system",
       actor_id: "cron:reconcile-sl",
@@ -91,6 +92,15 @@ export async function GET(req: NextRequest) {
         business: businessName,
         stuck_since: job.created_at,
       },
+    });
+    const createdAtMs = new Date(job.created_at as string).getTime();
+    const ageHours = Math.round((Date.now() - createdAtMs) / 3_600_000);
+    await notifyDispatchr({
+      type: "build.stuck",
+      token: job.token as string,
+      businessName,
+      buildId: (job.sl_build_id as string) || "",
+      ageHours,
     });
   }
 

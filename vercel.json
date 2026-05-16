@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/reconcile-sl-builds",
       "schedule": "0 */2 * * *"
+    },
+    {
+      "path": "/api/cron/notify-abandoned-submissions",
+      "schedule": "0 * * * *"
     }
   ]
 }

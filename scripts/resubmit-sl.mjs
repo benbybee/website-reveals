@@ -47,14 +47,19 @@ if (!SL_KEY || !SL_SECRET) {
 const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
 // Resolve token (allow 8-char prefix for convenience)
+// Note: form_sessions.token is a UUID column, so we have to fetch
+// recently-submitted sessions and filter client-side rather than `LIKE`-match.
 let token = tokenArg;
 if (tokenArg.length < 36) {
-  const { data: matches } = await supabase
+  const { data: recent } = await supabase
     .from("form_sessions")
     .select("token, form_data")
-    .like("token", `${tokenArg}%`);
-  if (!matches || matches.length === 0) {
-    console.error(`No form_session matches prefix "${tokenArg}"`);
+    .not("submitted_at", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(500);
+  const matches = (recent || []).filter((r) => String(r.token).startsWith(tokenArg));
+  if (matches.length === 0) {
+    console.error(`No recent submitted form_session matches prefix "${tokenArg}"`);
     process.exit(1);
   }
   if (matches.length > 1) {

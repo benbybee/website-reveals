@@ -244,10 +244,35 @@ export async function POST(
   // for the admin to see, but no dispatch happens — the row will surface in
   // the Stuck Builds widget after the threshold elapses.
   const useSiteLaunchr = shouldRouteToSiteLaunchr(submissionSource);
-  try {
-    console.log("[build] Queue start:", token, "form_type:", formType, "source:", submissionSource);
 
-    if (useSiteLaunchr) {
+  // Hard gate: /sales submissions cannot proceed without a customer email
+  // (formData.email). SL's sales-rep gate intentionally ignores contact_email
+  // for is_sales_rep_submission=true payloads — putting the rep's address on
+  // the customer's public site is the bug we're protecting against. If the
+  // rep didn't capture the customer's email, SL would 400 the dispatch
+  // (missing: ["contact.email"]) and the submission would orphan. Skip the
+  // dispatch entirely and surface the row in admin for manual follow-up.
+  const customerEmailMissing =
+    submissionSource === "sales" &&
+    !(typeof formData.email === "string" && (formData.email as string).includes("@"));
+
+  try {
+    console.log("[build] Queue start:", token, "form_type:", formType, "source:", submissionSource, "customer_email_missing:", customerEmailMissing);
+
+    if (customerEmailMissing && useSiteLaunchr) {
+      console.warn(`[build:sl] Skipping dispatch — /sales submission without customer email (formData.email). Token: ${token}`);
+      const { error: insertErr } = await supabase
+        .from("build_jobs")
+        .insert({
+          token,
+          form_type: formType,
+          pipeline: "manual",
+          status: "queued",
+          error: "Customer email (formData.email) missing — rep must collect it before SL dispatch. SL's sales-rep gate would reject.",
+          task_id: buildTaskId,
+        });
+      if (insertErr) console.error("[build:sl] manual queue insert failed:", insertErr.message);
+    } else if (useSiteLaunchr) {
       let slPayload;
       try {
         slPayload = buildSiteLaunchrPayload({

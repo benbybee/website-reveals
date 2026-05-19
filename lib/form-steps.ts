@@ -269,7 +269,7 @@ export const SALES_QUICK_STEPS: FormStep[] = [
       { id: "contact_email", label: "Your email (sales agent)", type: "email", required: true, hint: "We'll email you when the site is ready for review. This is your email, not the client's." },
       { id: "contact_phone", label: "Your phone number (sales agent)", type: "tel" },
       { id: "phone", label: "Phone number for the business's customers to call", type: "tel" },
-      { id: "email", label: "Email address for the business's customers", type: "email" },
+      { id: "email", label: "Email address for the business's customers", type: "email", required: true, hint: "Required — this is the address customers will see on the site's contact page. Must be the BUSINESS's email, not yours." },
       { id: "service_areas", label: "What cities or regions does the business serve?", type: "textarea" },
       { id: "contact_method", label: "How does the business prefer customers to reach them? (select all that apply)", type: "checkbox", options: ["Phone call", "Text message", "Email", "Contact form"] },
       { id: "current_url", label: "Does the business have a current website?", type: "text", placeholder: "https://example.com", hint: "If yes, paste the URL — the builder will pull address, phone, email, and other details from it." },

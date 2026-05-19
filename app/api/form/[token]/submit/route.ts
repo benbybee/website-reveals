@@ -6,7 +6,7 @@ import { resolveFormType } from "@/lib/resolve-form-type";
 import { FORM_STEPS } from "@/lib/form-steps";
 import { escapeHtml } from "@/lib/sanitize";
 import { getClientByEmail, createClient, updateClient } from "@/lib/clients";
-import { sendWelcomeEmail } from "@/lib/task-emails";
+import { sendWelcomeEmail, sendSalesRepSubmissionReceivedEmail } from "@/lib/task-emails";
 import { createTask } from "@/lib/tasks";
 import { sendTelegramMessage } from "@/lib/telegram";
 import { dispatchBuild, SiteLaunchrError } from "@/lib/sitelaunchr";
@@ -49,16 +49,20 @@ export async function POST(
 
   // Link sales rep if /sales submission AND contact_email matches an active rep
   let salesRepId: string | null = null;
+  let salesRepEmail: string | null = null;
+  let salesRepFirstName: string | null = null;
   if (submissionSource === "sales") {
     const repEmail = (formData.contact_email as string) || "";
     if (repEmail) {
       const { data: rep } = await supabase
         .from("sales_reps")
-        .select("id")
+        .select("id, email, first_name")
         .ilike("email", repEmail)
         .eq("active", true)
         .maybeSingle();
       salesRepId = rep?.id || null;
+      salesRepEmail = rep?.email || null;
+      salesRepFirstName = (rep?.first_name as string) || null;
     }
   }
 
@@ -290,6 +294,20 @@ export async function POST(
       console.error("[build:sl] Dispatch failed:", buildErr.status, buildErr.code, buildErr.message);
     } else {
       console.error("[build] Failed to queue build job:", buildErr);
+    }
+  }
+
+  // Sales rep submission-received confirmation (sales_rep audience)
+  if (isSalesSubmission && salesRepEmail && contactAllowed) {
+    try {
+      await sendSalesRepSubmissionReceivedEmail({
+        to: salesRepEmail,
+        repFirstName: salesRepFirstName || "there",
+        businessName,
+        industry: (formData.industry as string) || null,
+      });
+    } catch (emailErr) {
+      console.error("[submit] Sales rep confirmation email failed:", emailErr);
     }
   }
 

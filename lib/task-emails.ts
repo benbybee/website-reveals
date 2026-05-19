@@ -194,6 +194,56 @@ export async function sendReviewNotificationEmail(args: {
 }
 
 /**
+ * Sent to a sales rep immediately after they submit a /sales form, as a
+ * receipt + "what's next" so they have written confirmation the submission
+ * made it through. Fire-and-forget like the other rep emails.
+ */
+export async function sendSalesRepSubmissionReceivedEmail(args: {
+  to: string;
+  repFirstName: string;
+  businessName: string;
+  industry: string | null;
+}): Promise<void> {
+  const resend = getResend();
+  const baseUrl = BASE_URL();
+  const safeRepName = escapeHtml(args.repFirstName || "there");
+  const safeBusiness = escapeHtml(args.businessName);
+  const safeIndustry = args.industry ? escapeHtml(args.industry) : null;
+
+  await resend.emails.send({
+    from: FROM,
+    to: args.to,
+    subject: `Submission received — ${safeBusiness}`,
+    html: emailWrapper(`
+      <h2 style="font-family: Georgia, 'Playfair Display', serif; font-size: 24px; font-weight: 700; color: #111110; margin-bottom: 8px;">
+        Got it, ${safeRepName}.
+      </h2>
+      <p style="color: #555553; font-size: 15px; line-height: 1.6;">
+        We received your submission for <strong>${safeBusiness}</strong>${
+          safeIndustry ? ` (${safeIndustry})` : ""
+        }. The build is queued.
+      </p>
+      <div style="background: #ffffff; border: 1.5px solid #e8e6df; border-radius: 4px; padding: 18px 20px; margin: 24px 0;">
+        <p style="font-size: 11px; color: #888886; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 12px; font-weight: 600;">What happens next</p>
+        <ol style="margin: 0; padding-left: 20px; color: #444442; font-size: 13px; line-height: 1.6;">
+          <li>The site builds in the background (usually 15–30 minutes).</li>
+          <li>You'll get a second email once it's ready for review.</li>
+          <li>From your dashboard, you can preview the site and share it with the client — or flag any changes the client wants before going live.</li>
+        </ol>
+      </div>
+      <div style="margin-top: 24px;">
+        <a href="${baseUrl}/sales-rep" style="display: inline-block; background: #ff3d00; color: #fff; padding: 13px 32px; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 3px;">
+          Open Your Dashboard
+        </a>
+      </div>
+      <p style="margin-top: 24px; font-size: 12px; color: #888886; line-height: 1.6;">
+        Sit tight — we'll be in touch soon.
+      </p>
+    `),
+  });
+}
+
+/**
  * Sent to a sales rep when the admin marks one of their client's build
  * tasks as `complete`. Frames the message as "your client's site is ready
  * for review" with the deployed URL + WP admin URL + a CTA back to the

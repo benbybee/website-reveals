@@ -193,11 +193,87 @@ export async function sendReviewNotificationEmail(args: {
   });
 }
 
+/**
+ * Sent to a sales rep when the admin marks one of their client's build
+ * tasks as `complete`. Frames the message as "your client's site is ready
+ * for review" with the deployed URL + WP admin URL + a CTA back to the
+ * sales-rep dashboard. Replaces the generic sendStatusChangeEmail in this
+ * specific case (status=complete + audience=sales_rep).
+ */
+export async function sendSalesRepCompletionEmail(args: {
+  to: string;
+  repFirstName: string;
+  businessName: string;
+  siteUrl: string | null;
+  wpAdminUrl: string | null;
+  notes?: string | null;
+}): Promise<void> {
+  const resend = getResend();
+  const baseUrl = BASE_URL();
+  const safeRepName = escapeHtml(args.repFirstName || "there");
+  const safeBusiness = escapeHtml(args.businessName);
+
+  const siteBlock = args.siteUrl
+    ? `
+      <div style="background: #ffffff; border: 1.5px solid #e8e6df; border-radius: 4px; padding: 20px; margin: 24px 0;">
+        <p style="font-size: 11px; color: #888886; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 8px; font-weight: 600;">Live site</p>
+        <a href="${args.siteUrl}" style="color: #ff3d00; font-weight: 600; font-size: 16px; word-break: break-all;">${escapeHtml(args.siteUrl)}</a>
+        ${
+          args.wpAdminUrl
+            ? `<p style="font-size: 12px; color: #888886; margin: 12px 0 4px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">WordPress admin</p>
+               <a href="${args.wpAdminUrl}" style="color: #555553; font-size: 13px; word-break: break-all; text-decoration: none;">${escapeHtml(args.wpAdminUrl)}</a>`
+            : ""
+        }
+      </div>
+    `
+    : `
+      <div style="background: #fff5f2; border: 1.5px solid #ffcdc0; border-radius: 4px; padding: 14px 18px; margin: 24px 0; font-size: 13px; color: #b3300a;">
+        <strong>No site URL on file for this build.</strong> Check the admin tasks board for build details.
+      </div>
+    `;
+
+  const notesBlock = args.notes
+    ? `
+      <div style="margin: 16px 0; padding: 12px 16px; background: #faf9f5; border-left: 3px solid #ff3d00; font-size: 13px; color: #555553;">
+        <p style="font-size: 11px; color: #888886; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 4px; font-weight: 600;">Notes from admin</p>
+        <p style="margin: 0; line-height: 1.5; white-space: pre-wrap;">${escapeHtml(args.notes)}</p>
+      </div>
+    `
+    : "";
+
+  await resend.emails.send({
+    from: FROM,
+    to: args.to,
+    subject: `Your client's site is ready — ${safeBusiness}`,
+    html: emailWrapper(`
+      <h2 style="font-family: Georgia, 'Playfair Display', serif; font-size: 24px; font-weight: 700; color: #111110; margin-bottom: 8px;">
+        Site ready for client review
+      </h2>
+      <p style="color: #555553; font-size: 15px; line-height: 1.6;">
+        Hi ${safeRepName}, the website for <strong>${safeBusiness}</strong> is built and live.
+        Take a look, then share it with the client when you're ready.
+      </p>
+      ${siteBlock}
+      ${notesBlock}
+      <div style="margin-top: 24px;">
+        <a href="${baseUrl}/sales-rep" style="display: inline-block; background: #ff3d00; color: #fff; padding: 13px 32px; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 3px;">
+          View in Your Dashboard
+        </a>
+      </div>
+      <p style="margin-top: 24px; font-size: 12px; color: #888886; line-height: 1.6;">
+        From your dashboard you can post a comment or flag a change request
+        if the client wants edits before going live on their domain.
+      </p>
+    `),
+  });
+}
+
 export async function sendStatusChangeEmail(
   client: Client,
   task: Task,
   newStatus: TaskStatus,
-  notes?: string
+  notes?: string,
+  toOverride?: string,
 ): Promise<void> {
   const resend = getResend();
   const statusInfo = STATUS_MESSAGES[newStatus];
@@ -212,7 +288,7 @@ export async function sendStatusChangeEmail(
 
   await resend.emails.send({
     from: FROM,
-    to: client.email,
+    to: toOverride || client.email,
     subject: `[Website Reveals] ${statusInfo.heading}: ${escapeHtml(task.title)}`,
     html: emailWrapper(`
       <h2 style="font-family: Georgia, 'Playfair Display', serif; font-size: 24px; font-weight: 700; color: #111110; margin-bottom: 8px;">${statusInfo.heading}</h2>

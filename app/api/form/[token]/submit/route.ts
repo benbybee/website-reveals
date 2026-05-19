@@ -47,6 +47,25 @@ export async function POST(
   const formType = resolveFormType(formData);
   const submissionSource = (formData._source as string) || "claim-your-site";
 
+  // Hard reject /sales submissions without a customer email BEFORE marking the
+  // session submitted — that way the rep sees the error in the form UI, the
+  // form data stays editable, and they can fix + retry. Without this, a stale
+  // browser bundle (page loaded before today's required:true flag deployed)
+  // can squeak past client-side validation and produce a stuck manual build.
+  if (submissionSource === "sales") {
+    const customerEmail = (formData.email as string) || "";
+    if (!customerEmail || !customerEmail.includes("@")) {
+      console.warn(`[submit] Rejecting /sales submission ${token} — missing customer email (formData.email)`);
+      return NextResponse.json(
+        {
+          error:
+            "Customer email is required for /sales submissions. Add the business's email address (the one customers will use to contact them) and try again.",
+        },
+        { status: 400 },
+      );
+    }
+  }
+
   // Link sales rep if /sales submission AND contact_email matches an active rep
   let salesRepId: string | null = null;
   let salesRepEmail: string | null = null;

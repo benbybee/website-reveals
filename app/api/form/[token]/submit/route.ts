@@ -204,7 +204,11 @@ export async function POST(
     (formData.contact_email as string) ||
     (formData.email as string) ||
     (session.email as string);
-  if (clientEmail && contactAllowed) {
+  // Skip DNS-instructions email for /sales submissions \u2014 contact_email here
+  // is the rep's address, and the rep doesn't manage DNS. The rep gets the
+  // separate "submission received" confirmation instead. DNS handoff happens
+  // later via the agency / when the client takes possession.
+  if (clientEmail && contactAllowed && !isSalesSubmission) {
     const dnsHtml = getDnsInstructions(dnsProvider, ipAddress, businessName);
     await resend.emails.send({
       from: "Website Reveals <creativemarketing@websitereveals.com>",

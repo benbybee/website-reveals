@@ -380,8 +380,12 @@ async function fireLiveCallbackSideEffects(args: {
     isNotificationEnabled("admin"),
   ]);
 
-  // DNS-instructions email to the contact (sales agent for sales submissions)
-  if (contactEmail && contactAllowed) {
+  // Skip DNS-instructions email for /sales submissions — contact_email is the
+  // rep's address and they don't manage DNS. Reps get the "site ready for
+  // client review" email when admin marks the task complete (which contains
+  // the deployed URL); DNS pointing happens when the client takes possession.
+  const isSalesSubmissionLive = submissionSource === "sales";
+  if (contactEmail && contactAllowed && !isSalesSubmissionLive) {
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
       const dnsHtml = getDnsInstructions(dnsProvider, ipAddress, businessName);

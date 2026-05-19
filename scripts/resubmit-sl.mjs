@@ -114,16 +114,36 @@ if (existing && existing.pipeline === "sitelaunchr" && !force) {
   process.exit(1);
 }
 
-// Build brief — matches lib/sitelaunchr-mapper.ts exactly
+// Build brief — must stay in sync with lib/sitelaunchr-mapper.ts.
+// Field-name translation: WR `current_url` → SL `domain_name`,
+// WR `inspiration_sites` → SL `reference_sites` (array). WR-local
+// `domain_name` (intended target meaning) is dropped.
+const RENAMED_OR_DROPPED = new Set(["current_url", "inspiration_sites", "domain_name"]);
 const brief = {};
 for (const [k, v] of Object.entries(fd)) {
   if (k.startsWith("_")) continue;
   if (v === undefined || v === null || v === "") continue;
+  if (RENAMED_OR_DROPPED.has(k)) continue;
   brief[k] = v;
 }
 brief.business_name = businessName;
 brief.industry = industry;
 brief.contact_email = contactEmail;
+
+if (fd.current_url) brief.domain_name = fd.current_url;
+if (fd.inspiration_sites) {
+  const text =
+    typeof fd.inspiration_sites === "string"
+      ? fd.inspiration_sites
+      : Array.isArray(fd.inspiration_sites)
+        ? fd.inspiration_sites.map((x) => String(x)).join("\n")
+        : "";
+  const matches = text.match(/https?:\/\/[^\s,)<>"']+/gi) || [];
+  const cleaned = matches.map((u) => u.replace(/[.,;:!?)]+$/, ""));
+  const urls = Array.from(new Set(cleaned));
+  if (urls.length > 0) brief.reference_sites = urls;
+}
+
 if (isSales) brief.is_sales_rep_submission = true;
 
 const slug =

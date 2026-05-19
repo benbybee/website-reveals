@@ -162,6 +162,21 @@ export function AdminShell({
             Notifications →
           </Link>
           <Link
+            href="/admin/archived"
+            style={{
+              fontFamily: "var(--font-sans)",
+              fontSize: "13px",
+              fontWeight: 500,
+              color: "#555553",
+              textDecoration: "none",
+              border: "1.5px solid #d8d6cf",
+              borderRadius: "3px",
+              padding: "6px 14px",
+            }}
+          >
+            Archived →
+          </Link>
+          <Link
             href="/admin/audit"
             style={{
               fontFamily: "var(--font-sans)",

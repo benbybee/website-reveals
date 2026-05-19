@@ -487,30 +487,34 @@ export function TasksPanel({
             paddingBottom: 8,
           }}
         >
-          {TASK_STATUSES.map((status) => (
+          {TASK_STATUSES.map((status) => {
+            const isEmpty = columns[status].length === 0;
+            return (
             <div
               key={status}
               onDragOver={(e) => handleDragOver(e, status)}
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, status)}
               style={{
-                minWidth: 250,
-                flex: "1 1 0",
+                minWidth: isEmpty ? 56 : 250,
+                flex: isEmpty ? "0 0 56px" : "1 1 0",
                 padding: 8,
                 background:
-                  dragOverColumn === status ? "#eceae3" : "#f5f4ef",
+                  dragOverColumn === status ? "#eceae3" : isEmpty ? "#faf9f5" : "#f5f4ef",
                 borderRadius: 6,
-                transition: "background 0.15s ease",
+                transition: "background 0.15s ease, min-width 0.15s ease",
               }}
+              title={isEmpty ? `${STATUS_LABELS[status]} (empty — drop here to add)` : undefined}
             >
               {/* Column header */}
               <div
                 style={{
                   display: "flex",
+                  flexDirection: isEmpty ? "column" : "row",
                   alignItems: "center",
-                  gap: 8,
-                  marginBottom: 10,
-                  padding: "4px 4px",
+                  gap: isEmpty ? 6 : 8,
+                  marginBottom: isEmpty ? 0 : 10,
+                  padding: isEmpty ? "8px 0" : "4px 4px",
                 }}
               >
                 <div
@@ -522,28 +526,46 @@ export function TasksPanel({
                     flexShrink: 0,
                   }}
                 />
-                <span
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: "#1a1a18",
-                  }}
-                >
-                  {STATUS_LABELS[status]}
-                </span>
+                {!isEmpty && (
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "#1a1a18",
+                    }}
+                  >
+                    {STATUS_LABELS[status]}
+                  </span>
+                )}
                 <span
                   style={{
                     fontFamily: "var(--font-mono)",
-                    fontSize: 11,
+                    fontSize: isEmpty ? 10 : 11,
                     background: STATUS_COLORS[status] + "18",
                     color: STATUS_COLORS[status],
-                    padding: "1px 6px",
+                    padding: isEmpty ? "1px 5px" : "1px 6px",
                     borderRadius: 2,
                     fontWeight: 600,
                   }}
                 >
                   {columns[status].length}
                 </span>
+                {isEmpty && (
+                  <span
+                    style={{
+                      fontSize: 9,
+                      color: "#888886",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      writingMode: "vertical-rl",
+                      transform: "rotate(180deg)",
+                      marginTop: 4,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {STATUS_LABELS[status]}
+                  </span>
+                )}
               </div>
 
               {/* Cards */}
@@ -679,20 +701,9 @@ export function TasksPanel({
                 );
               })}
 
-              {columns[status].length === 0 && (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "#bbb",
-                    textAlign: "center",
-                    padding: "20px 8px",
-                  }}
-                >
-                  No tasks
-                </div>
-              )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

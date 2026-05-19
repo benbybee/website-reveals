@@ -34,6 +34,7 @@ export default async function AdminPage() {
         "*, client:clients(id, first_name, last_name, company_name, email)"
       )
       .is("parent_task_id", null)
+      .is("archived_at", null)
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: false }),
     listSalesReps(),

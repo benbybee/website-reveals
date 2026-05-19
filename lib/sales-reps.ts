@@ -217,6 +217,7 @@ export async function getDashboardDataForRep(repId: string) {
       )
       .in("client_id", clientIds)
       .is("parent_task_id", null)
+      .is("archived_at", null)
       .order("created_at", { ascending: false });
     tasks = taskRows || [];
   }

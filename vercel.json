@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/notify-abandoned-submissions",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/archive-completed-tasks",
+      "schedule": "10 4 * * *"
     }
   ]
 }

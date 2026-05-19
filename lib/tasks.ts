@@ -53,6 +53,7 @@ export async function getTasks(filters?: {
   client_id?: string;
   status?: TaskStatus;
   parent_only?: boolean;
+  includeArchived?: boolean;
 }): Promise<Task[]> {
   const supabase = createServerClient();
 
@@ -65,6 +66,7 @@ export async function getTasks(filters?: {
   if (filters?.client_id) query = query.eq("client_id", filters.client_id);
   if (filters?.status) query = query.eq("status", filters.status);
   if (filters?.parent_only) query = query.is("parent_task_id", null);
+  if (!filters?.includeArchived) query = query.is("archived_at", null);
 
   const { data, error } = await query;
   if (error) throw new Error(`Failed to fetch tasks: ${error.message}`);
@@ -74,6 +76,7 @@ export async function getTasks(filters?: {
 export async function getTasksWithClients(filters?: {
   status?: TaskStatus;
   client_id?: string;
+  includeArchived?: boolean;
 }): Promise<TaskWithClient[]> {
   const supabase = createServerClient();
 
@@ -88,6 +91,7 @@ export async function getTasksWithClients(filters?: {
 
   if (filters?.status) query = query.eq("status", filters.status);
   if (filters?.client_id) query = query.eq("client_id", filters.client_id);
+  if (!filters?.includeArchived) query = query.is("archived_at", null);
 
   const { data, error } = await query;
   if (error) throw new Error(`Failed to fetch tasks: ${error.message}`);
@@ -256,7 +260,8 @@ export async function getClientTaskCounts(
     .from("tasks")
     .select("status")
     .eq("client_id", clientId)
-    .is("parent_task_id", null);
+    .is("parent_task_id", null)
+    .is("archived_at", null);
 
   if (error || !data) return counts;
 

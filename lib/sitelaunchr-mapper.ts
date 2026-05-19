@@ -23,6 +23,28 @@ function str(fd: Record<string, unknown>, key: string): string | undefined {
 }
 
 /**
+ * `inspiration_sites` comes in as free-form textarea (URLs mixed with
+ * commentary, one per line, possibly bullets). SL's reference_sites
+ * expects an array of bare URLs. Extracts http(s) URLs from whatever
+ * shape the input takes (string, array, undefined) and returns a
+ * deduplicated array.
+ */
+function extractUrlsFromInspiration(input: unknown): string[] {
+  let text = "";
+  if (typeof input === "string") {
+    text = input;
+  } else if (Array.isArray(input)) {
+    text = input.map((x) => String(x)).join("\n");
+  } else {
+    return [];
+  }
+  const matches = text.match(/https?:\/\/[^\s,)<>"']+/gi) || [];
+  // Strip trailing punctuation that often hangs off URLs in prose
+  const cleaned = matches.map((u) => u.replace(/[.,;:!?)]+$/, ""));
+  return Array.from(new Set(cleaned));
+}
+
+/**
  * Convert our internal form_data + token into the payload SiteLaunchr expects.
  * Strips our private `_source`/`_mode` keys. SL's wrMapper drops any unknown
  * keys server-side, so over-sending is fine.
@@ -61,16 +83,40 @@ export function buildSiteLaunchrPayload(args: {
   // belongs to the rep, not the client, and SL is responsible for not surfacing
   // those values on the client's built site. The is_sales_submission flag
   // below gives SL the signal it needs to know the brief came in via /sales.
+  //
+  // Field-name translation (per SL's docs/integrations/wr-cutover.md):
+  //   WR `current_url`        → SL `domain_name`  (URL SL scrapes for assets)
+  //   WR `inspiration_sites`  → SL `reference_sites` (array of design refs)
+  //   WR `domain_name`        → DROPPED  (means "intended target" in WR, but
+  //                              that collides with SL's claim on the same
+  //                              name. Intended-target is handled out-of-band
+  //                              via the DNS-instructions email.)
+  const RENAMED_OR_DROPPED = new Set([
+    "current_url",
+    "inspiration_sites",
+    "domain_name",
+  ]);
   const brief: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(formData)) {
     if (k.startsWith("_")) continue;
     if (v === undefined || v === null || v === "") continue;
+    if (RENAMED_OR_DROPPED.has(k)) continue;
     brief[k] = v;
   }
-  // Ensure required fields are present in `brief` even if duplicated above
+
+  // Required fields (enforced earlier; set last so they can't be overwritten)
   brief.business_name = businessName;
   brief.industry = industry;
   brief.contact_email = contactEmail;
+
+  // Field-name translation: WR-local → SL canonical
+  const currentUrl = str(formData, "current_url");
+  if (currentUrl) brief.domain_name = currentUrl;
+
+  const inspiration = formData.inspiration_sites;
+  const refUrls = extractUrlsFromInspiration(inspiration);
+  if (refUrls.length > 0) brief.reference_sites = refUrls;
+
   // Flag for SL's mapper so it knows contact_* is rep-owned, not client-owned.
   // (SL will drop the field server-side if its schema doesn't list it.)
   if (isSalesSubmission) {

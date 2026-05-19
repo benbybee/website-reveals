@@ -107,7 +107,19 @@ export function buildSiteLaunchrPayload(args: {
   // Required fields (enforced earlier; set last so they can't be overwritten)
   brief.business_name = businessName;
   brief.industry = industry;
+  // Send contact in every form we know of — flat, nested, literal-dotted key.
+  // SL's current validator rejects two of these but doesn't tell us which one
+  // it wants; sending all three is harmless (SL drops fields it doesn't
+  // recognize) and unblocks builds the moment SL fixes their side. Strip
+  // once SL confirms the canonical shape.
   brief.contact_email = contactEmail;
+  brief["contact.email"] = contactEmail;
+  const contactObj: Record<string, unknown> = { email: contactEmail };
+  const contactPhone = str(formData, "contact_phone");
+  if (contactPhone) contactObj.phone = contactPhone;
+  const contactPerson = str(formData, "contact_person") || str(formData, "contact_name");
+  if (contactPerson) contactObj.person = contactPerson;
+  brief.contact = contactObj;
 
   // Field-name translation: WR-local → SL canonical
   const currentUrl = str(formData, "current_url");

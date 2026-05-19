@@ -128,7 +128,15 @@ for (const [k, v] of Object.entries(fd)) {
 }
 brief.business_name = businessName;
 brief.industry = industry;
+// Send contact in EVERY form we can think of — flat, nested, and literal-dotted.
+// SL's validator rejects two of these but won't tell us which one it wants.
 brief.contact_email = contactEmail;
+brief["contact.email"] = contactEmail;
+const contactObj = { email: contactEmail };
+if (fd.contact_phone && String(fd.contact_phone).trim()) contactObj.phone = fd.contact_phone;
+const _person = fd.contact_person || fd.contact_name;
+if (_person && String(_person).trim()) contactObj.person = _person;
+brief.contact = contactObj;
 
 if (fd.current_url) brief.domain_name = fd.current_url;
 if (fd.inspiration_sites) {
@@ -171,6 +179,16 @@ const payload = {
 };
 
 const rawBody = JSON.stringify(payload);
+
+if (process.env.DEBUG_SL_PAYLOAD === "1") {
+  console.log("\n--- Outbound brief.contact ---");
+  console.log(JSON.stringify(payload.brief.contact, null, 2));
+  console.log("--- Outbound brief.contact_email ---");
+  console.log(JSON.stringify(payload.brief.contact_email));
+  console.log("--- Outbound brief keys ---");
+  console.log(Object.keys(payload.brief));
+  console.log("--- end debug ---\n");
+}
 const timestamp = String(Math.floor(Date.now() / 1000));
 const signature = createHmac("sha256", SL_SECRET).update(`${timestamp}.${rawBody}`).digest("hex");
 

@@ -1,29 +1,10 @@
 import { redirect } from "next/navigation";
-import { getSalesRepSession } from "@/lib/sales-rep-auth";
-import { getSalesRepById } from "@/lib/sales-reps";
-import { SalesV2Shell } from "@/components/sales-v2/SalesV2Shell";
 
-export const dynamic = "force-dynamic";
-
-export const metadata = {
-  title: "New Client Site — Sales Rep",
-  robots: { index: false, follow: false },
-};
-
-export default async function SalesV2Page() {
-  const session = await getSalesRepSession();
-  if (!session) redirect("/sales-rep/login?next=/sales-v2");
-
-  const rep = await getSalesRepById(session.rep_id);
-  if (!rep || !rep.active) redirect("/sales-rep/login?next=/sales-v2");
-
-  return (
-    <SalesV2Shell
-      rep={{
-        first_name: rep.first_name,
-        last_name: rep.last_name,
-        email: rep.email,
-      }}
-    />
-  );
+// /sales-v2 was the staging URL during the scraper-flow rollout. The canonical
+// location is now /sales. Keep this thin redirect so any bookmarked tabs or
+// stale links still land in the right place — middleware does NOT auth-gate
+// this path, so the redirect happens before the login check and reps don't
+// see a flash of the login page.
+export default function SalesV2RedirectPage() {
+  redirect("/sales");
 }

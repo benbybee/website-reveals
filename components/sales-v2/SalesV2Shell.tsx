@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { FirecrawlBranding, FirecrawlBusinessJson, ScrapeResult } from "@/lib/firecrawl";
 
@@ -310,13 +310,37 @@ function Stage3Review({
   onBack: () => void;
   onNext: () => void;
 }) {
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const emailRowRef = useRef<HTMLDivElement>(null);
+
   // Helper to update a text field (and auto-accept on edit)
   const updateText = (key: keyof Pick<ReviewState, "business_name" | "email" | "phone" | "address" | "service_areas" | "about_text">, val: string) => {
+    // Clear the email error as soon as the rep starts typing in the email field —
+    // visual nag only stays until they're addressing it.
+    if (key === "email" && validationError) setValidationError(null);
     setReview({ ...review, [key]: { value: val, accepted: true } });
   };
   const toggleAccept = (key: keyof Pick<ReviewState, "business_name" | "email" | "phone" | "address" | "service_areas" | "about_text">) => {
     setReview({ ...review, [key]: { ...review[key], accepted: !review[key].accepted } });
   };
+
+  const handleNext = () => {
+    // Business email is the contact point SL puts on the built site. Required
+    // (and the SL mapper will reject the dispatch if it's missing), so block
+    // here before the rep gets to industry/references/submit and hits a confusing
+    // "missing field" failure 3 steps later.
+    const email = review.email.value.trim();
+    const emailValid = email.length > 0 && email.includes("@") && review.email.accepted;
+    if (!emailValid) {
+      setValidationError("Business email is required — this is the contact email customers see on the built site. Add or accept the email field above before continuing.");
+      emailRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    setValidationError(null);
+    onNext();
+  };
+
+  const emailInvalid = validationError !== null;
 
   // Counts for "Accept all" buttons
   const colorsAllAccepted = review.colors.length > 0 && review.colors.every((c) => c.accepted);
@@ -337,13 +361,16 @@ function Stage3Review({
           onChange={(v) => updateText("business_name", v)}
           onToggle={() => toggleAccept("business_name")}
         />
-        <EditableRow
-          label="Email"
-          value={review.email.value}
-          accepted={review.email.accepted}
-          onChange={(v) => updateText("email", v)}
-          onToggle={() => toggleAccept("email")}
-        />
+        <div ref={emailRowRef}>
+          <EditableRow
+            label="Email *"
+            value={review.email.value}
+            accepted={review.email.accepted}
+            onChange={(v) => updateText("email", v)}
+            onToggle={() => toggleAccept("email")}
+            invalid={emailInvalid}
+          />
+        </div>
         <EditableRow
           label="Phone"
           value={review.phone.value}
@@ -520,9 +547,10 @@ function Stage3Review({
         </Section>
       )}
 
+      {validationError && <div style={{ ...errorBoxStyle, marginTop: 16 }}>{validationError}</div>}
       <div style={navRow}>
         <button onClick={onBack} style={backBtn}>← Back</button>
-        <button onClick={onNext} className="btn-orange" style={primaryBtn}>Next →</button>
+        <button onClick={handleNext} className="btn-orange" style={primaryBtn}>Next →</button>
       </div>
     </Card>
   );
@@ -739,6 +767,7 @@ function EditableRow({
   onChange,
   onToggle,
   multiline,
+  invalid,
 }: {
   label: string;
   value: string;
@@ -746,15 +775,23 @@ function EditableRow({
   onChange: (v: string) => void;
   onToggle: () => void;
   multiline?: boolean;
+  invalid?: boolean;
 }) {
+  const fieldStyle = {
+    ...inputStyle,
+    padding: "6px 10px",
+    fontSize: 13,
+    ...(multiline ? { minHeight: 40 } : {}),
+    ...(invalid ? { border: "1.5px solid #b3300a", background: "#fff5f2" } : {}),
+  };
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "6px 0", borderBottom: "1px solid #f0eeea" }}>
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 11, color: "#888886", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 }}>{label}</div>
+        <div style={{ fontSize: 11, color: invalid ? "#b3300a" : "#888886", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 }}>{label}</div>
         {multiline ? (
-          <textarea value={value} onChange={(e) => onChange(e.target.value)} style={{ ...inputStyle, padding: "6px 10px", fontSize: 13, minHeight: 40 }} />
+          <textarea value={value} onChange={(e) => onChange(e.target.value)} style={fieldStyle} />
         ) : (
-          <input value={value} onChange={(e) => onChange(e.target.value)} style={{ ...inputStyle, padding: "6px 10px", fontSize: 13 }} />
+          <input value={value} onChange={(e) => onChange(e.target.value)} style={fieldStyle} />
         )}
       </div>
       <AcceptToggle accepted={accepted} onToggle={onToggle} />

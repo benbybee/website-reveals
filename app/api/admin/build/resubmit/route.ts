@@ -68,7 +68,20 @@ export async function POST(req: NextRequest) {
   const formData = (session.form_data as Record<string, unknown>) || {};
   const formType = resolveFormType(formData);
 
-  // Build the SL payload — same logic as the live submit path
+  // Generate a unique external_id for this retry. SL's idempotency is keyed
+  // on (source_id, external_id) — sending the original token would make SL
+  // return the previous attempt's sl_build_id as a duplicate, which then
+  // collides with our UNIQUE index on build_jobs.sl_build_id and the insert
+  // fails. Counting existing build_jobs rows for this token gives us a stable
+  // retry index that survives multiple admin resubmits.
+  const { count: priorCount } = await supabase
+    .from("build_jobs")
+    .select("*", { count: "exact", head: true })
+    .eq("token", token);
+  const retryIndex = priorCount || 0; // "-retry-N" where N = number of existing rows
+  const retryExternalId = `${token}-retry-${retryIndex}`;
+
+  // Build the SL payload — unique external_id so SL treats this as a fresh build
   let payload;
   try {
     payload = buildSiteLaunchrPayload({
@@ -76,6 +89,7 @@ export async function POST(req: NextRequest) {
       formType,
       formData,
       callbackUrl: process.env.SITELAUNCHR_CALLBACK_URL,
+      externalId: retryExternalId,
     });
   } catch (mapErr) {
     const msg = mapErr instanceof Error ? mapErr.message : String(mapErr);
@@ -97,6 +111,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Dispatch error: ${msg}` }, { status: 500 });
   }
 
+  // Belt-and-suspenders: SL shouldn't return duplicate=true with our unique
+  // retry external_id, but if their cache is stale, don't insert a row that'd
+  // collide with the existing one.
+  if (dispatch.duplicate) {
+    return NextResponse.json(
+      {
+        error: `SL returned duplicate=true for retry external_id ${retryExternalId} (build_id ${dispatch.build_id}). Their idempotency cache may be stale.`,
+        sl_build_id: dispatch.build_id,
+        retry_external_id: retryExternalId,
+      },
+      { status: 409 },
+    );
+  }
+
   const nowIso = new Date().toISOString();
 
   // Insert the new build_jobs row, linked to the same task
@@ -105,7 +133,7 @@ export async function POST(req: NextRequest) {
     form_type: formType,
     pipeline: "sitelaunchr",
     status: "queued",
-    external_id: token,
+    external_id: retryExternalId,
     sl_build_id: dispatch.build_id,
     sl_phase: dispatch.status,
     sl_phase_at: nowIso,
@@ -150,6 +178,8 @@ export async function POST(req: NextRequest) {
     target_id: taskId,
     details: {
       token,
+      retry_external_id: retryExternalId,
+      retry_index: retryIndex,
       sl_build_id: dispatch.build_id,
       from_status: task.status,
       reset_to_backlog: RESETTABLE.has(task.status as string),

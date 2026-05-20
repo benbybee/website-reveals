@@ -58,8 +58,14 @@ export function buildSiteLaunchrPayload(args: {
   formData: Record<string, unknown>;
   callbackUrl?: string;
   priority?: "normal" | "high";
+  /**
+   * Override the external_id sent to SL. Defaults to the form_session token.
+   * Set this for resubmits so SL's idempotency (source_id + external_id)
+   * doesn't return the previous attempt's build_id as a duplicate.
+   */
+  externalId?: string;
 }) {
-  const { token, formType, formData, callbackUrl, priority } = args;
+  const { token, formType, formData, callbackUrl, priority, externalId } = args;
 
   const businessName = str(formData, "business_name");
   const contactEmail = str(formData, "contact_email") || str(formData, "email");
@@ -141,7 +147,7 @@ export function buildSiteLaunchrPayload(args: {
     (contactEmail ? contactEmail!.split("@")[0] : "Owner");
 
   return {
-    external_id: token,
+    external_id: externalId || token,
     form_type: slFormType,
     brief,
     kura: {

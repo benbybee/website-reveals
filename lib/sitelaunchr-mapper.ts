@@ -169,6 +169,10 @@ export function buildSiteLaunchrPayload(args: {
   // v2 fields (brand_colors, logo_url, has_logo, image_urls) are dropped
   // from the flat brief and re-nested under brief.brand below per the SL
   // brand/image contract. _form_version is an internal marker we never send.
+  //
+  // standard_pages used to ship flat at brief root; SL's new contract wants it
+  // nested under brief.pages.standard_pages. brand_personality is WR's legacy
+  // field name; SL canonical is "personality" — translated below.
   const RENAMED_OR_DROPPED = new Set([
     "current_url",
     "inspiration_sites",
@@ -177,6 +181,8 @@ export function buildSiteLaunchrPayload(args: {
     "logo_url",
     "has_logo",
     "image_urls",
+    "standard_pages",
+    "brand_personality",
   ]);
   const brief: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(formData)) {
@@ -210,6 +216,24 @@ export function buildSiteLaunchrPayload(args: {
   const inspiration = formData.inspiration_sites;
   const refUrls = extractUrlsFromInspiration(inspiration);
   if (refUrls.length > 0) brief.reference_sites = refUrls;
+
+  // brief.pages.standard_pages — SL's v4 contract wants the page list nested,
+  // not flat. Accept either string[] (v2 checkbox group) or comma-string (older
+  // form submissions) and emit only when there's something to send.
+  const standardPagesRaw = formData.standard_pages;
+  const standardPages: string[] = Array.isArray(standardPagesRaw)
+    ? standardPagesRaw.map((p) => String(p)).filter((p) => p.trim())
+    : typeof standardPagesRaw === "string" && standardPagesRaw.trim()
+      ? standardPagesRaw.split(",").map((p) => p.trim()).filter(Boolean)
+      : [];
+  if (standardPages.length > 0) {
+    brief.pages = { standard_pages: standardPages };
+  }
+
+  // brand_personality → personality (SL canonical); look_and_feel passes
+  // through unchanged. Both ride at brief root per SL's audit feedback.
+  const brandPersonality = str(formData, "brand_personality");
+  if (brandPersonality) brief.personality = brandPersonality;
 
   // Flag for SL's mapper so it knows contact_* is rep-owned, not client-owned.
   // (SL will drop the field server-side if its schema doesn't list it.)

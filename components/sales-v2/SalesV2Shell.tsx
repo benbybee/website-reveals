@@ -11,10 +11,29 @@ type Stage =
   | "review_scrape" // Step 3a: accept/reject each scraped item
   | "manual_entry" // Step 2b: no-site path
   | "industry" // Common: required industry field
+  | "pages_voice" // Common: standard_pages + personality + look_and_feel
   | "references" // Common: reference URLs
   | "additional_info" // Common: optional notes
   | "submitting"
   | "submitted";
+
+const PAGE_OPTIONS = [
+  "Home",
+  "About",
+  "Services",
+  "Individual service pages",
+  "Contact",
+  "FAQ",
+  "Blog",
+  "Gallery",
+  "Testimonials",
+  "Financing",
+  "Careers",
+  "Team",
+  "Resources",
+  "Privacy Policy",
+  "Terms and Conditions",
+];
 
 interface RepProps {
   first_name: string;
@@ -60,6 +79,11 @@ export function SalesV2Shell({ rep }: { rep: RepProps }) {
     differentiators: "",
   });
   const [industry, setIndustry] = useState("");
+  // Sensible defaults — every site needs Home/Services/Contact at minimum, so
+  // pre-check them. Rep can untick if a client really doesn't want one.
+  const [standardPages, setStandardPages] = useState<string[]>(["Home", "Services", "Contact", "About"]);
+  const [personality, setPersonality] = useState("");
+  const [lookAndFeel, setLookAndFeel] = useState("");
   const [refUrls, setRefUrls] = useState<string[]>([""]);
   const [additionalInfo, setAdditionalInfo] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -107,6 +131,9 @@ export function SalesV2Shell({ rep }: { rep: RepProps }) {
         manual,
         rep,
         industry,
+        standardPages,
+        personality,
+        lookAndFeel,
         refUrls,
         additionalInfo,
       });
@@ -134,7 +161,7 @@ export function SalesV2Shell({ rep }: { rep: RepProps }) {
       setSubmitError(err instanceof Error ? err.message : "Submission failed");
       setStage("additional_info");
     }
-  }, [hasExisting, url, review, manual, rep, industry, refUrls, additionalInfo]);
+  }, [hasExisting, url, review, manual, rep, industry, standardPages, personality, lookAndFeel, refUrls, additionalInfo]);
 
   // ── Render ────────────────────────────────────────────────────────
   return (
@@ -190,6 +217,19 @@ export function SalesV2Shell({ rep }: { rep: RepProps }) {
             industry={industry}
             setIndustry={setIndustry}
             onBack={() => setStage(hasExisting ? "review_scrape" : "manual_entry")}
+            onNext={() => setStage("pages_voice")}
+          />
+        )}
+
+        {stage === "pages_voice" && (
+          <StagePagesVoice
+            standardPages={standardPages}
+            setStandardPages={setStandardPages}
+            personality={personality}
+            setPersonality={setPersonality}
+            lookAndFeel={lookAndFeel}
+            setLookAndFeel={setLookAndFeel}
+            onBack={() => setStage("industry")}
             onNext={() => setStage("references")}
           />
         )}
@@ -198,7 +238,7 @@ export function SalesV2Shell({ rep }: { rep: RepProps }) {
           <StageReferences
             urls={refUrls}
             setUrls={setRefUrls}
-            onBack={() => setStage("industry")}
+            onBack={() => setStage("pages_voice")}
             onNext={() => setStage("additional_info")}
           />
         )}
@@ -628,6 +668,76 @@ function StageIndustry({
   );
 }
 
+function StagePagesVoice({
+  standardPages,
+  setStandardPages,
+  personality,
+  setPersonality,
+  lookAndFeel,
+  setLookAndFeel,
+  onBack,
+  onNext,
+}: {
+  standardPages: string[];
+  setStandardPages: (v: string[]) => void;
+  personality: string;
+  setPersonality: (s: string) => void;
+  lookAndFeel: string;
+  setLookAndFeel: (s: string) => void;
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  const togglePage = (page: string) => {
+    if (standardPages.includes(page)) {
+      setStandardPages(standardPages.filter((p) => p !== page));
+    } else {
+      setStandardPages([...standardPages, page]);
+    }
+  };
+
+  return (
+    <Card>
+      <h2 style={h2Style}>Pages, voice, and style</h2>
+      <p style={pStyle}>What pages should the site have, and what should it feel like? You can leave any field blank.</p>
+
+      <FieldLabel>Pages to include</FieldLabel>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 4, marginBottom: 8 }}>
+        {PAGE_OPTIONS.map((page) => (
+          <label key={page} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", cursor: "pointer", fontSize: 13, color: "#333" }}>
+            <input
+              type="checkbox"
+              checked={standardPages.includes(page)}
+              onChange={() => togglePage(page)}
+            />
+            {page}
+          </label>
+        ))}
+      </div>
+
+      <FieldLabel>Brand personality (a few words)</FieldLabel>
+      <input
+        value={personality}
+        onChange={(e) => setPersonality(e.target.value)}
+        placeholder="e.g. professional, warm, bold, family-friendly"
+        style={inputStyle}
+      />
+
+      <FieldLabel>Desired look and feel</FieldLabel>
+      <textarea
+        value={lookAndFeel}
+        onChange={(e) => setLookAndFeel(e.target.value)}
+        placeholder="e.g. clean and modern with lots of white space; or rustic and warm with earthy tones"
+        style={{ ...inputStyle, minHeight: 80 }}
+      />
+
+      <div style={navRow}>
+        <button onClick={onBack} style={backBtn}>← Back</button>
+        <button onClick={onNext} className="btn-orange" style={primaryBtn}>Next →</button>
+      </div>
+    </Card>
+  );
+}
+
 function StageReferences({
   urls,
   setUrls,
@@ -906,10 +1016,13 @@ function buildFormData(args: {
   manual: ManualState;
   rep: RepProps;
   industry: string;
+  standardPages: string[];
+  personality: string;
+  lookAndFeel: string;
   refUrls: string[];
   additionalInfo: string;
 }): Record<string, unknown> {
-  const { hasExisting, url, review, manual, rep, industry, refUrls, additionalInfo } = args;
+  const { hasExisting, url, review, manual, rep, industry, standardPages, personality, lookAndFeel, refUrls, additionalInfo } = args;
 
   const fd: Record<string, unknown> = {
     _source: "sales",
@@ -918,6 +1031,9 @@ function buildFormData(args: {
     industry,
     contact_email: rep.email,
     contact_person: rep.first_name + (rep.last_name ? ` ${rep.last_name}` : ""),
+    standard_pages: standardPages,
+    brand_personality: personality.trim(),
+    look_and_feel: lookAndFeel.trim(),
     anything_else: additionalInfo || "",
     inspiration_sites: refUrls.filter((u) => u.trim()).join("\n"),
   };

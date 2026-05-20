@@ -150,6 +150,10 @@ export function TaskDetailDrawer({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Resubmit build
+  const [resubmitting, setResubmitting] = useState(false);
+  const [resubmitFlash, setResubmitFlash] = useState<string | null>(null);
+
   // Upload
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -1034,6 +1038,75 @@ export function TaskDetailDrawer({
                 </div>
               )}
             </div>
+
+            {/* ─── Resubmit Build (only when task is blocked) ─── */}
+            {task.status === "blocked" && (
+              <div style={{ padding: "16px 0 0" }}>
+                {resubmitFlash && (
+                  <div
+                    style={{
+                      border: "1px solid #c5e8c5",
+                      background: "#f5fbf5",
+                      color: "#1e6b1e",
+                      padding: "10px 14px",
+                      borderRadius: "4px",
+                      fontFamily: "var(--font-sans)",
+                      fontSize: "12px",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    {resubmitFlash}
+                  </div>
+                )}
+                <button
+                  disabled={resubmitting}
+                  onClick={async () => {
+                    if (!confirm("Resubmit this build to SiteLaunchr?\n\nThis creates a new build attempt with the same form data, resets the task to backlog, and the new run drives task status forward via the normal callback flow. The previous failed build_jobs row stays as history.")) {
+                      return;
+                    }
+                    setResubmitting(true);
+                    setResubmitFlash(null);
+                    try {
+                      const res = await fetch("/api/admin/build/resubmit", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ task_id: taskId }),
+                      });
+                      const body = await res.json().catch(() => ({}));
+                      if (!res.ok) {
+                        alert(body?.error || `Resubmit failed (${res.status})`);
+                        return;
+                      }
+                      setResubmitFlash(`Resubmitted. New SL build_id: ${(body.sl_build_id || "").slice(0, 8)}. Task reset to backlog.`);
+                      onUpdated();
+                    } catch (err) {
+                      alert(err instanceof Error ? err.message : "Resubmit failed");
+                    } finally {
+                      setResubmitting(false);
+                    }
+                  }}
+                  style={{
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    letterSpacing: "0.04em",
+                    padding: "8px 16px",
+                    borderRadius: "4px",
+                    border: "1px solid #ff3d00",
+                    cursor: resubmitting ? "not-allowed" : "pointer",
+                    background: "#ff3d00",
+                    color: "#fff",
+                    width: "100%",
+                    opacity: resubmitting ? 0.6 : 1,
+                  }}
+                >
+                  {resubmitting ? "Resubmitting…" : "↻ Resubmit Build to SiteLaunchr"}
+                </button>
+                <p style={{ fontFamily: "var(--font-sans)", fontSize: "11px", color: "#888886", marginTop: "6px", lineHeight: 1.5 }}>
+                  Use this when SL reports a build failure (OOM, timeout, kura_push_failed) and you want to retry with the same form data without asking the rep to resubmit.
+                </p>
+              </div>
+            )}
 
             {/* ─── Delete Task ─── */}
             <div style={{ padding: "24px 0 0" }}>

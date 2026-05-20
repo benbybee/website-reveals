@@ -45,6 +45,75 @@ function extractUrlsFromInspiration(input: unknown): string[] {
 }
 
 /**
+ * SL brand/image contract requires strict #RRGGBB(AA) hex.
+ * Drop anything that doesn't match — SL will reject the whole brand block
+ * if any color is malformed.
+ */
+function isValidHex(s: unknown): s is string {
+  return typeof s === "string" && /^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(s);
+}
+
+/**
+ * SL requires absolute https URLs for all image fields. http://, relative
+ * paths, data: URIs, and protocol-relative URLs all get rejected. We drop
+ * them on our side so the brand block is clean before dispatch.
+ */
+function isValidHttpsUrl(s: unknown): s is string {
+  if (typeof s !== "string") return false;
+  try {
+    const u = new URL(s);
+    return u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/** Accept array of hex strings or a comma/space-separated string. Dedup, lowercase, validate. */
+function parseBrandColors(input: unknown): string[] {
+  let raw: string[];
+  if (Array.isArray(input)) {
+    raw = input.map((s) => String(s));
+  } else if (typeof input === "string") {
+    raw = input.split(/[,\s]+/);
+  } else {
+    return [];
+  }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const s of raw) {
+    const trimmed = s.trim();
+    if (!isValidHex(trimmed)) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
+/** Accept array of URLs or a string containing URLs. Validate https, dedup. */
+function parseImageUrls(input: unknown): string[] {
+  let raw: string[];
+  if (Array.isArray(input)) {
+    raw = input.map((s) => String(s));
+  } else if (typeof input === "string") {
+    raw = input.match(/https:\/\/[^\s,)<>"']+/gi) || [];
+  } else {
+    return [];
+  }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const s of raw) {
+    const trimmed = s.trim().replace(/[.,;:!?)]+$/, "");
+    if (!isValidHttpsUrl(trimmed)) continue;
+    if (seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    out.push(trimmed);
+  }
+  return out;
+}
+
+/**
  * Convert our internal form_data + token into the payload SiteLaunchr expects.
  * Strips our private `_source`/`_mode` keys. SL's wrMapper drops any unknown
  * keys server-side, so over-sending is fine.
@@ -97,10 +166,17 @@ export function buildSiteLaunchrPayload(args: {
   //                              that collides with SL's claim on the same
   //                              name. Intended-target is handled out-of-band
   //                              via the DNS-instructions email.)
+  // v2 fields (brand_colors, logo_url, has_logo, image_urls) are dropped
+  // from the flat brief and re-nested under brief.brand below per the SL
+  // brand/image contract. _form_version is an internal marker we never send.
   const RENAMED_OR_DROPPED = new Set([
     "current_url",
     "inspiration_sites",
     "domain_name",
+    "brand_colors",
+    "logo_url",
+    "has_logo",
+    "image_urls",
   ]);
   const brief: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(formData)) {
@@ -141,10 +217,43 @@ export function buildSiteLaunchrPayload(args: {
     brief.is_sales_rep_submission = true;
   }
 
+  // v2 brand/image contract: /sales-v2 submissions ship scraped logo, colors,
+  // and images. SL's v4 design engine expects them under brief.brand (not flat)
+  // and validates hex + https strictly. Build the brand block here; for v1
+  // submissions there's nothing to nest, so we skip it entirely.
+  const isV2Submission = str(formData, "_form_version") === "v2";
+  if (isV2Submission) {
+    const logoUrlRaw = str(formData, "logo_url");
+    const logoUrl = logoUrlRaw && isValidHttpsUrl(logoUrlRaw) ? logoUrlRaw : undefined;
+    const colors = parseBrandColors(formData.brand_colors);
+    const images = parseImageUrls(formData.image_urls);
+
+    const brand: Record<string, unknown> = {
+      has_logo: !!logoUrl,
+      colors,
+      reference_urls: refUrls,
+      // No semantic distinction in the form yet — surface the first scraped
+      // image as the hero candidate, rest as gallery. SL is free to reshuffle.
+      hero_images: images.slice(0, 1),
+      gallery: images.slice(1),
+      team_photos: [],
+      service_photos: [],
+      testimonial_avatars: [],
+    };
+    if (logoUrl) brand.logo_url = logoUrl;
+
+    brief.brand = brand;
+  }
+
   const ownerName =
     str(formData, "contact_person") ||
     str(formData, "contact_name") ||
     (contactEmail ? contactEmail!.split("@")[0] : "Owner");
+
+  const options: Record<string, unknown> = { priority: priority || "normal" };
+  // v4 design engine is what consumes brief.brand. Only route v2 submissions
+  // there; v1 submissions stay on whatever engine SL defaults to.
+  if (isV2Submission) options.design_engine = "v4";
 
   return {
     external_id: externalId || token,
@@ -157,7 +266,7 @@ export function buildSiteLaunchrPayload(args: {
       slug: slugify(businessName!),
     },
     ...(callbackUrl ? { callback_url: callbackUrl } : {}),
-    options: { priority: priority || "normal" },
+    options,
   };
 }
 

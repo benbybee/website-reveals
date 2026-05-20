@@ -30,10 +30,23 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // /sales-v2 is the new rep-authed questionnaire flow — gate it the same
+  // way as /sales-rep. /sales (v1) stays public for back-compat.
+  const isSalesV2Route = request.nextUrl.pathname.startsWith("/sales-v2");
+  if (isSalesV2Route) {
+    const token = request.cookies.get("sales_rep_session")?.value;
+    if (!token) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/sales-rep/login";
+      url.searchParams.set("next", "/sales-v2");
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Admin route protection (Supabase auth)
   return await updateSession(request);
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/portal/:path*", "/sales-rep/:path*"],
+  matcher: ["/admin/:path*", "/portal/:path*", "/sales-rep/:path*", "/sales-v2/:path*"],
 };

@@ -1,7 +1,11 @@
-// 25% markup on top of actual Claude Code API cost.
-// Stored as a multiplier so cost_usd * MARKUP = billable amount.
+// Multiplier applied to build_jobs.cost_usd to produce the billable amount.
+// Set to 3.0 because cost_usd currently underestimates real Anthropic API
+// spend by ~50% — actual builds cost $9-13 while cost_usd averages ~$5. At
+// 3.0× the average billable lands around $15 so we stay clear of the worst-
+// case actual cost. Drop this back toward 1.25-1.4× once the cost basis env
+// vars (SITELAUNCHR_COST_QUICK / _STANDARD / _IN_DEPTH) are recalibrated.
 // The markup is intentionally NOT shown on the invoice itself.
-export const BILLING_MARKUP = 1.25;
+export const BILLING_MARKUP = 3.0;
 
 export const INVOICE_BUSINESS_NAME = "Ben Bybee";
 

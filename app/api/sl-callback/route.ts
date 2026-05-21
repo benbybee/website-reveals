@@ -8,6 +8,7 @@ import { escapeHtml } from "@/lib/sanitize";
 import { isNotificationEnabled, audienceForSubmission } from "@/lib/notification-settings";
 import { sendReviewNotificationEmail } from "@/lib/task-emails";
 import { notifyDispatchr } from "@/lib/dispatchr-webhook";
+import { computeCostFromTokens } from "@/lib/anthropic-pricing";
 
 type SlPhase =
   | "queued"
@@ -46,6 +47,25 @@ interface SlCallbackBody {
   cloudways_app_id: string | null;
   error_message: string | null;
   transitioned_at: string;
+  // ─── Optional per-build cost reporting (added 2026-05) ─────────────────
+  // SL is the only system that knows which Anthropic API calls belong to
+  // which build. When the build completes (phase=live) it should send one
+  // of these on the same callback to give WR an accurate cost basis.
+  //
+  // PREFERRED — SL sends the final USD amount it computed (includes any
+  // SL-side margin or fees). WR stores it verbatim.
+  cost_usd?: number;
+  // ALTERNATIVE — SL sends raw token counts + model name; WR computes
+  // cost using current Anthropic pricing in lib/anthropic-pricing.ts.
+  // Use this when SL wants WR to track at-cost Anthropic spend without
+  // SL's own margin baked in.
+  usage?: {
+    model?: string;
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
 }
 
 /**
@@ -180,13 +200,46 @@ export async function POST(req: NextRequest) {
     patch.completed_at = transitionedAtIso;
     patch.sl_live_at = transitionedAtIso;
 
-    // Compute build duration & estimated cost (per form_type if env override is set)
-    const startMs = job.sl_running_at
-      ? new Date(job.sl_running_at).getTime()
-      : new Date(job.created_at).getTime();
-    const liveMs = new Date(transitionedAtIso).getTime();
-    const durationMin = Math.max(1, (liveMs - startMs) / 60000);
-    patch.cost_usd = estimateBuildCost(durationMin, job.form_type as string | undefined);
+    // Cost basis — three sources, in order of preference:
+    //   1. SL sends a final cost_usd on the callback → store verbatim.
+    //   2. SL sends a usage block (model + token counts) → WR computes
+    //      cost via lib/anthropic-pricing.ts using current rates.
+    //   3. Neither → fall back to the duration-based estimate
+    //      (legacy behavior, hits a ceiling clamp on long builds).
+    // Token columns are populated whenever SL provides them, regardless
+    // of which cost path was used — keeps audit trail intact.
+    if (body.usage) {
+      const u = body.usage;
+      if (typeof u.input_tokens === "number") patch.input_tokens = u.input_tokens;
+      if (typeof u.output_tokens === "number") patch.output_tokens = u.output_tokens;
+      if (typeof u.cache_creation_input_tokens === "number") patch.cache_creation_tokens = u.cache_creation_input_tokens;
+      if (typeof u.cache_read_input_tokens === "number") patch.cache_read_tokens = u.cache_read_input_tokens;
+      if (typeof u.model === "string" && u.model.trim()) patch.model = u.model.trim();
+    }
+
+    if (typeof body.cost_usd === "number" && body.cost_usd >= 0) {
+      // Source 1: SL-computed cost. Trust it.
+      patch.cost_usd = body.cost_usd;
+    } else if (body.usage && (body.usage.input_tokens || body.usage.output_tokens)) {
+      // Source 2: derive from tokens at current Anthropic pricing.
+      patch.cost_usd = computeCostFromTokens(
+        {
+          input_tokens: body.usage.input_tokens,
+          output_tokens: body.usage.output_tokens,
+          cache_creation_input_tokens: body.usage.cache_creation_input_tokens,
+          cache_read_input_tokens: body.usage.cache_read_input_tokens,
+        },
+        body.usage.model,
+      );
+    } else {
+      // Source 3: legacy estimate from build duration.
+      const startMs = job.sl_running_at
+        ? new Date(job.sl_running_at).getTime()
+        : new Date(job.created_at).getTime();
+      const liveMs = new Date(transitionedAtIso).getTime();
+      const durationMin = Math.max(1, (liveMs - startMs) / 60000);
+      patch.cost_usd = estimateBuildCost(durationMin, job.form_type as string | undefined);
+    }
   }
 
   if (phase === "failed" || phase === "canceled" || phase === "kura_push_failed") {

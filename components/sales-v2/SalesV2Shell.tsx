@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { FirecrawlBranding, FirecrawlBusinessJson, ScrapeResult } from "@/lib/firecrawl";
+import { INDUSTRY_CATEGORIES } from "@/lib/industries";
 
 type Stage =
   | "ask_existing" // Step 1: existing site Y/N
@@ -10,9 +11,8 @@ type Stage =
   | "scraping" // Loading
   | "review_scrape" // Step 3a: accept/reject each scraped item
   | "manual_entry" // Step 2b: no-site path
-  | "industry" // Common: required industry field
+  | "industry" // Common: dropdown + optional "Other" free text
   | "pages_voice" // Common: standard_pages + personality + look_and_feel
-  | "references" // Common: reference URLs
   | "additional_info" // Common: optional notes
   | "submitting"
   | "submitted";
@@ -78,13 +78,15 @@ export function SalesV2Shell({ rep }: { rep: RepProps }) {
     all_services: "",
     differentiators: "",
   });
-  const [industry, setIndustry] = useState("");
+  // industrySlug = one of INDUSTRY_CATEGORIES (or "" if not yet chosen).
+  // industryOther = free text shown only when slug === "other".
+  const [industrySlug, setIndustrySlug] = useState("");
+  const [industryOther, setIndustryOther] = useState("");
   // Sensible defaults — every site needs Home/Services/Contact at minimum, so
   // pre-check them. Rep can untick if a client really doesn't want one.
   const [standardPages, setStandardPages] = useState<string[]>(["Home", "Services", "Contact", "About"]);
   const [personality, setPersonality] = useState("");
   const [lookAndFeel, setLookAndFeel] = useState("");
-  const [refUrls, setRefUrls] = useState<string[]>([""]);
   const [additionalInfo, setAdditionalInfo] = useState("");
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -130,11 +132,11 @@ export function SalesV2Shell({ rep }: { rep: RepProps }) {
         review,
         manual,
         rep,
-        industry,
+        industrySlug,
+        industryOther,
         standardPages,
         personality,
         lookAndFeel,
-        refUrls,
         additionalInfo,
       });
 
@@ -161,7 +163,7 @@ export function SalesV2Shell({ rep }: { rep: RepProps }) {
       setSubmitError(err instanceof Error ? err.message : "Submission failed");
       setStage("additional_info");
     }
-  }, [hasExisting, url, review, manual, rep, industry, standardPages, personality, lookAndFeel, refUrls, additionalInfo]);
+  }, [hasExisting, url, review, manual, rep, industrySlug, industryOther, standardPages, personality, lookAndFeel, additionalInfo]);
 
   // ── Render ────────────────────────────────────────────────────────
   return (
@@ -214,8 +216,10 @@ export function SalesV2Shell({ rep }: { rep: RepProps }) {
 
         {stage === "industry" && (
           <StageIndustry
-            industry={industry}
-            setIndustry={setIndustry}
+            slug={industrySlug}
+            setSlug={setIndustrySlug}
+            otherText={industryOther}
+            setOtherText={setIndustryOther}
             onBack={() => setStage(hasExisting ? "review_scrape" : "manual_entry")}
             onNext={() => setStage("pages_voice")}
           />
@@ -230,15 +234,6 @@ export function SalesV2Shell({ rep }: { rep: RepProps }) {
             lookAndFeel={lookAndFeel}
             setLookAndFeel={setLookAndFeel}
             onBack={() => setStage("industry")}
-            onNext={() => setStage("references")}
-          />
-        )}
-
-        {stage === "references" && (
-          <StageReferences
-            urls={refUrls}
-            setUrls={setRefUrls}
-            onBack={() => setStage("pages_voice")}
             onNext={() => setStage("additional_info")}
           />
         )}
@@ -247,7 +242,7 @@ export function SalesV2Shell({ rep }: { rep: RepProps }) {
           <StageAdditional
             text={additionalInfo}
             setText={setAdditionalInfo}
-            onBack={() => setStage("references")}
+            onBack={() => setStage("pages_voice")}
             onSubmit={runSubmit}
             error={submitError}
           />
@@ -640,29 +635,54 @@ function Stage2Manual({
 }
 
 function StageIndustry({
-  industry,
-  setIndustry,
+  slug,
+  setSlug,
+  otherText,
+  setOtherText,
   onBack,
   onNext,
 }: {
-  industry: string;
-  setIndustry: (s: string) => void;
+  slug: string;
+  setSlug: (s: string) => void;
+  otherText: string;
+  setOtherText: (s: string) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
+  const needsOther = slug === "other";
+  const valid = slug && (!needsOther || otherText.trim().length > 0);
   return (
     <Card>
       <h2 style={h2Style}>Industry / category</h2>
-      <p style={pStyle}>One or two words — used for industry-appropriate imagery and design references.</p>
-      <input
-        value={industry}
-        onChange={(e) => setIndustry(e.target.value)}
-        placeholder="e.g. plumber, chiropractor, dental, landscaping"
-        style={inputStyle}
-      />
+      <p style={pStyle}>Used to attach industry-appropriate reference sites and imagery. Pick the closest category — Other if nothing fits.</p>
+
+      <FieldLabel>Category *</FieldLabel>
+      <select value={slug} onChange={(e) => setSlug(e.target.value)} style={inputStyle}>
+        <option value="">— Choose one —</option>
+        {INDUSTRY_CATEGORIES.map((c) => (
+          <option key={c.slug} value={c.slug}>{c.label}</option>
+        ))}
+      </select>
+
+      {needsOther && (
+        <>
+          <FieldLabel>Describe the industry *</FieldLabel>
+          <input
+            value={otherText}
+            onChange={(e) => setOtherText(e.target.value)}
+            placeholder="e.g. dental, plumber, mortgage broker"
+            style={inputStyle}
+            autoFocus
+          />
+          <p style={{ fontSize: 12, color: "#888886", marginTop: 6 }}>
+            We&apos;ll log this for admin review — recurring ones may earn their own category later.
+          </p>
+        </>
+      )}
+
       <div style={navRow}>
         <button onClick={onBack} style={backBtn}>← Back</button>
-        <button onClick={onNext} disabled={!industry.trim()} className="btn-orange" style={{ ...primaryBtn, opacity: industry.trim() ? 1 : 0.4 }}>Next →</button>
+        <button onClick={onNext} disabled={!valid} className="btn-orange" style={{ ...primaryBtn, opacity: valid ? 1 : 0.4 }}>Next →</button>
       </div>
     </Card>
   );
@@ -738,52 +758,6 @@ function StagePagesVoice({
   );
 }
 
-function StageReferences({
-  urls,
-  setUrls,
-  onBack,
-  onNext,
-}: {
-  urls: string[];
-  setUrls: (u: string[]) => void;
-  onBack: () => void;
-  onNext: () => void;
-}) {
-  return (
-    <Card>
-      <h2 style={h2Style}>Sites the client likes</h2>
-      <p style={pStyle}>Reference URLs we&apos;ll use as design inspiration. Add as many as you want.</p>
-      {urls.map((u, idx) => (
-        <div key={idx} style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          <input
-            type="url"
-            value={u}
-            onChange={(e) => {
-              const next = [...urls];
-              next[idx] = e.target.value;
-              setUrls(next);
-            }}
-            placeholder="https://example.com"
-            style={{ ...inputStyle, flex: 1 }}
-          />
-          {urls.length > 1 && (
-            <button
-              onClick={() => setUrls(urls.filter((_, i) => i !== idx))}
-              style={{ ...secondaryBtn, padding: "8px 12px" }}
-            >
-              ✕
-            </button>
-          )}
-        </div>
-      ))}
-      <button onClick={() => setUrls([...urls, ""])} style={secondaryBtn}>+ Add another</button>
-      <div style={navRow}>
-        <button onClick={onBack} style={backBtn}>← Back</button>
-        <button onClick={onNext} className="btn-orange" style={primaryBtn}>Next →</button>
-      </div>
-    </Card>
-  );
-}
 
 function StageAdditional({
   text,
@@ -1015,27 +989,38 @@ function buildFormData(args: {
   review: ReviewState | null;
   manual: ManualState;
   rep: RepProps;
-  industry: string;
+  industrySlug: string;
+  industryOther: string;
   standardPages: string[];
   personality: string;
   lookAndFeel: string;
-  refUrls: string[];
   additionalInfo: string;
 }): Record<string, unknown> {
-  const { hasExisting, url, review, manual, rep, industry, standardPages, personality, lookAndFeel, refUrls, additionalInfo } = args;
+  const { hasExisting, url, review, manual, rep, industrySlug, industryOther, standardPages, personality, lookAndFeel, additionalInfo } = args;
+
+  // industry: the SL mapper still requires a non-empty `industry` string.
+  // For dropdown picks we send the human label (e.g. "Health & Wellness");
+  // for Other we send the rep's free text. industry_slug carries the
+  // structured value submit-route uses for reference lookup + Other logging.
+  // inspiration_sites is intentionally absent — submit-route fills it from
+  // the admin-managed reference catalog based on industry_slug.
+  const industryLabel = industrySlug === "other"
+    ? industryOther.trim()
+    : (INDUSTRY_CATEGORIES.find((c) => c.slug === industrySlug)?.label || "");
 
   const fd: Record<string, unknown> = {
     _source: "sales",
     _mode: "quick",
     _form_version: "v2",
-    industry,
+    industry: industryLabel,
+    industry_slug: industrySlug,
+    ...(industrySlug === "other" ? { industry_other_text: industryOther.trim() } : {}),
     contact_email: rep.email,
     contact_person: rep.first_name + (rep.last_name ? ` ${rep.last_name}` : ""),
     standard_pages: standardPages,
     brand_personality: personality.trim(),
     look_and_feel: lookAndFeel.trim(),
     anything_else: additionalInfo || "",
-    inspiration_sites: refUrls.filter((u) => u.trim()).join("\n"),
   };
 
   if (hasExisting && review) {

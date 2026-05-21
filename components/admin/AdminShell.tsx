@@ -147,6 +147,21 @@ export function AdminShell({
             Sales Reps →
           </Link>
           <Link
+            href="/admin/industries"
+            style={{
+              fontFamily: "var(--font-sans)",
+              fontSize: "13px",
+              fontWeight: 500,
+              color: "#555553",
+              textDecoration: "none",
+              border: "1.5px solid #d8d6cf",
+              borderRadius: "3px",
+              padding: "6px 14px",
+            }}
+          >
+            Industries →
+          </Link>
+          <Link
             href="/admin/notifications"
             style={{
               fontFamily: "var(--font-sans)",

@@ -13,6 +13,7 @@ import { dispatchBuild, SiteLaunchrError } from "@/lib/sitelaunchr";
 import { buildSiteLaunchrPayload, shouldRouteToSiteLaunchr } from "@/lib/sitelaunchr-mapper";
 import { isNotificationEnabled, audienceForSubmission } from "@/lib/notification-settings";
 import { notifyDispatchr, buildBriefPreview } from "@/lib/dispatchr-webhook";
+import { resolveIndustryReferences, logOtherSubmission } from "@/lib/industries";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
@@ -85,11 +86,46 @@ export async function POST(
     }
   }
 
-  // Mark as submitted + attach sales rep if applicable
+  // Inject admin-curated reference URLs based on industry_slug. For the 10
+  // fixed categories, look up the slug directly. For "other", let the alias
+  // matcher try to resolve to a real category. Either way we mutate formData
+  // here so the SL mapper sees the inspiration_sites string later, AND we
+  // persist the mutation back to form_sessions so admin tooling sees the
+  // same data the dispatch saw. Every "Other" submission gets an
+  // industry_other_log row regardless of match outcome.
+  if (submissionSource === "sales") {
+    const industrySlug = (formData.industry_slug as string) || "";
+    const industryOther = (formData.industry_other_text as string) || "";
+    if (industrySlug) {
+      try {
+        const resolved = await resolveIndustryReferences({
+          industrySlug,
+          otherText: industryOther,
+        });
+        if (resolved.urls.length > 0) {
+          formData.inspiration_sites = resolved.urls.join("\n");
+        }
+        if (industrySlug === "other") {
+          await logOtherSubmission({
+            formToken: token,
+            rawText: industryOther,
+            resolvedSlug: resolved.matchedAlias?.industry_slug || null,
+            status: resolved.matchedAlias ? "auto_mapped" : "pending",
+          });
+        }
+      } catch (refErr) {
+        console.error("[submit] industry reference lookup failed:", refErr);
+      }
+    }
+  }
+
+  // Mark as submitted + attach sales rep if applicable + persist any
+  // mutations we made to form_data above (inspiration_sites injection).
   await supabase
     .from("form_sessions")
     .update({
       submitted_at: new Date().toISOString(),
+      form_data: formData,
       ...(salesRepId ? { sales_rep_id: salesRepId } : {}),
     })
     .eq("token", token);

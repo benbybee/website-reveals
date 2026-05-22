@@ -26,6 +26,7 @@ type Task = Record<string, unknown> & {
   priority: string;
   created_at: string;
   updated_at: string;
+  sales_outcome?: "sold" | "not_needed" | null;
   client?: { id: string; first_name: string; last_name: string; company_name: string; email: string } | null;
 };
 
@@ -182,8 +183,11 @@ function ClientsTab({ clients }: { clients: Client[] }) {
   );
 }
 
-function TasksTab({ tasks }: { tasks: Task[] }) {
+function TasksTab({ tasks: initialTasks }: { tasks: Task[] }) {
+  // Local copy so outcome actions can update the row inline without a refetch.
+  const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [selected, setSelected] = useState<Task | null>(null);
+  const [outcomeFor, setOutcomeFor] = useState<{ task: Task; outcome: "sold" | "not_needed" } | null>(null);
 
   if (tasks.length === 0) {
     return <EmptyState message="No tasks yet. Build tasks will appear here once a submission is processed." />;
@@ -195,6 +199,16 @@ function TasksTab({ tasks }: { tasks: Task[] }) {
   }
 
   const order = ["backlog", "in_progress", "review", "blocked", "complete"];
+
+  const applyOutcome = (taskId: string, outcome: "sold" | "not_needed") => {
+    // 'not_needed' archives the task → drop it from the local list so it
+    // disappears from the dashboard immediately (matches server behavior).
+    if (outcome === "not_needed") {
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    } else {
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, sales_outcome: outcome } : t)));
+    }
+  };
 
   return (
     <>
@@ -216,7 +230,7 @@ function TasksTab({ tasks }: { tasks: Task[] }) {
                     <th style={th}>Title</th>
                     <th style={th}>Client</th>
                     <th style={th}>Updated</th>
-                    <th style={th}></th>
+                    <th style={{ ...th, textAlign: "right" }}>Outcome / Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -226,9 +240,30 @@ function TasksTab({ tasks }: { tasks: Task[] }) {
                       <td style={td}>{t.client?.company_name || "—"}</td>
                       <td style={td}>{new Date(t.updated_at as string).toLocaleString()}</td>
                       <td style={{ ...td, textAlign: "right" }}>
-                        <button onClick={() => setSelected(t)} style={smallBtnStyle}>
-                          Comment / Request →
-                        </button>
+                        <div style={{ display: "inline-flex", gap: "6px", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                          {t.sales_outcome === "sold" && (
+                            <span style={{ ...soldBadge }}>✓ SOLD</span>
+                          )}
+                          {t.sales_outcome !== "sold" && (
+                            <button
+                              onClick={() => setOutcomeFor({ task: t, outcome: "sold" })}
+                              style={soldBtnStyle}
+                              title="Mark as sold — keeps the site visible"
+                            >
+                              Sold
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setOutcomeFor({ task: t, outcome: "not_needed" })}
+                            style={notNeededBtnStyle}
+                            title="Mark as not needed — archives the site"
+                          >
+                            Not needed
+                          </button>
+                          <button onClick={() => setSelected(t)} style={smallBtnStyle}>
+                            Comment →
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -241,7 +276,129 @@ function TasksTab({ tasks }: { tasks: Task[] }) {
       {selected && (
         <CommentModal task={selected} onClose={() => setSelected(null)} />
       )}
+      {outcomeFor && (
+        <OutcomeModal
+          task={outcomeFor.task}
+          outcome={outcomeFor.outcome}
+          onClose={() => setOutcomeFor(null)}
+          onSuccess={() => {
+            applyOutcome(outcomeFor.task.id, outcomeFor.outcome);
+            setOutcomeFor(null);
+          }}
+        />
+      )}
     </>
+  );
+}
+
+function OutcomeModal({
+  task,
+  outcome,
+  onClose,
+  onSuccess,
+}: {
+  task: Task;
+  outcome: "sold" | "not_needed";
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isSold = outcome === "sold";
+  const label = isSold ? "Mark as Sold" : "Mark as Not Needed";
+  const accentColor = isSold ? "#2e7d32" : "#b3300a";
+
+  async function submit() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/sales-rep/tasks/${task.id}/outcome`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ outcome, notes: notes.trim() || null }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error || `${res.status}`);
+      }
+      onSuccess();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, background: "rgba(17,17,16,0.4)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px" }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ background: "#fff", border: "1.5px solid #e8e6df", borderRadius: "6px", padding: "28px 32px", width: "100%", maxWidth: "520px", fontFamily: "var(--font-sans)" }}
+      >
+        <h2 style={{ fontFamily: "var(--font-serif)", fontSize: "1.3rem", fontWeight: 700, marginBottom: "4px", color: accentColor }}>
+          {label}
+        </h2>
+        <p style={{ fontSize: "13px", color: "#555553", marginBottom: "16px", lineHeight: 1.5 }}>
+          <strong>{task.title}</strong> · {task.client?.company_name || "—"}
+          <br />
+          {isSold
+            ? "The system admin will be notified by email and Telegram. The site stays visible on your dashboard."
+            : "The system admin will be notified by email and Telegram. The site is archived from your dashboard and admin's active views (still recoverable)."}
+        </p>
+
+        <label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.05em", color: "#888886", fontWeight: 600, marginBottom: "6px" }}>
+          Notes (optional)
+        </label>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder={isSold ? "Deal size, close date, any context for admin…" : "Why isn't this needed? (lead cold, client declined, duplicate, etc.)"}
+          style={{
+            width: "100%",
+            minHeight: "100px",
+            padding: "10px 12px",
+            border: "1.5px solid #d8d6cf",
+            borderRadius: "4px",
+            fontSize: "14px",
+            fontFamily: "inherit",
+            background: "#faf9f5",
+            boxSizing: "border-box",
+          }}
+        />
+
+        {error && (
+          <div style={{ marginTop: "12px", padding: "10px 14px", background: "#fff5f2", border: "1px solid #ffcdc0", borderRadius: "3px", fontSize: "13px", color: "#b3300a" }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "20px" }}>
+          <button onClick={onClose} style={btnGhost}>Cancel</button>
+          <button
+            onClick={submit}
+            disabled={submitting}
+            style={{
+              fontFamily: "var(--font-sans)",
+              fontSize: "13px",
+              padding: "8px 18px",
+              background: accentColor,
+              color: "#fff",
+              border: "none",
+              borderRadius: "3px",
+              cursor: submitting ? "not-allowed" : "pointer",
+              opacity: submitting ? 0.5 : 1,
+              fontWeight: 600,
+            }}
+          >
+            {submitting ? "Submitting…" : `Confirm ${isSold ? "Sold" : "Not Needed"}`}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -351,6 +508,39 @@ const smallBtnStyle: React.CSSProperties = {
   borderRadius: "3px",
   padding: "4px 10px",
   cursor: "pointer",
+};
+const soldBtnStyle: React.CSSProperties = {
+  fontFamily: "var(--font-sans)",
+  fontSize: "12px",
+  color: "#2e7d32",
+  background: "transparent",
+  border: "1px solid #b5d8b5",
+  borderRadius: "3px",
+  padding: "4px 10px",
+  cursor: "pointer",
+  fontWeight: 600,
+};
+const notNeededBtnStyle: React.CSSProperties = {
+  fontFamily: "var(--font-sans)",
+  fontSize: "12px",
+  color: "#888886",
+  background: "transparent",
+  border: "1px solid #d8d6cf",
+  borderRadius: "3px",
+  padding: "4px 10px",
+  cursor: "pointer",
+};
+const soldBadge: React.CSSProperties = {
+  display: "inline-block",
+  background: "#2e7d32",
+  color: "#fff",
+  padding: "3px 8px",
+  borderRadius: "3px",
+  fontFamily: "var(--font-mono)",
+  fontSize: "10px",
+  textTransform: "uppercase",
+  letterSpacing: "0.06em",
+  fontWeight: 700,
 };
 
 function EmptyState({ message }: { message: string }) {

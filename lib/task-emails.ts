@@ -411,3 +411,53 @@ export async function sendClientRequestNotification(
     `),
   });
 }
+
+/**
+ * Admin notification when a sales rep marks a task SOLD or NOT NEEDED.
+ * One email per action — keeps admin in the loop so they can review/cleanup.
+ * `outcome` is the new value (post-mutation); pass the rep + optional notes
+ * so the email shows who did what.
+ */
+export async function sendSalesOutcomeNotification(args: {
+  client: { company_name: string; first_name: string; last_name: string; email: string };
+  task: { id: string; title: string };
+  outcome: "sold" | "not_needed";
+  repName: string;
+  repEmail: string;
+  notes?: string | null;
+}): Promise<void> {
+  const { client, task, outcome, repName, repEmail, notes } = args;
+  const resend = getResend();
+  const adminEmail = process.env.AGENCY_EMAIL;
+  if (!adminEmail) return;
+
+  const isSold = outcome === "sold";
+  const label = isSold ? "Sold" : "Not Needed";
+  const tagColor = isSold ? "#2e7d32" : "#888886";
+  const subjectPrefix = isSold ? "✅ Sold" : "🗑️ Not Needed";
+
+  await resend.emails.send({
+    from: FROM,
+    to: adminEmail,
+    subject: `[${subjectPrefix}] ${escapeHtml(client.company_name)} — ${escapeHtml(task.title)}`,
+    html: emailWrapper(`
+      <h2 style="font-family: Georgia, 'Playfair Display', serif; font-size: 24px; font-weight: 700; color: #111110; margin-bottom: 8px;">
+        Sales outcome: <span style="color: ${tagColor};">${label}</span>
+      </h2>
+      <p style="color: #888886; font-size: 15px;">
+        <strong>${escapeHtml(repName)}</strong> (${escapeHtml(repEmail)}) marked this task as <strong>${label}</strong>.
+        ${isSold ? "The task stays visible." : "The task has been archived and is now hidden from active dashboards."}
+      </p>
+      <div style="background: #ffffff; border: 1.5px solid #e8e6df; border-radius: 4px; padding: 20px; margin: 24px 0;">
+        <h3 style="font-size: 16px; color: #111110; margin: 0 0 6px;">${escapeHtml(task.title)}</h3>
+        <p style="font-size: 13px; color: #888886; margin: 0 0 4px;">
+          ${escapeHtml(client.company_name)} — ${escapeHtml(client.first_name)} ${escapeHtml(client.last_name)} (${escapeHtml(client.email)})
+        </p>
+        ${notes ? `<p style="font-size: 14px; color: #111110; line-height: 1.5; border-left: 3px solid ${tagColor}; padding-left: 12px; margin-top: 12px;">${escapeHtml(notes)}</p>` : ""}
+      </div>
+      <a href="${BASE_URL()}/admin/tasks?task=${task.id}" style="display: inline-block; background: #ff3d00; color: #fff; padding: 13px 32px; text-decoration: none; font-size: 15px; font-weight: 600; border-radius: 3px; margin-top: 16px;">
+        View in Admin
+      </a>
+    `),
+  });
+}

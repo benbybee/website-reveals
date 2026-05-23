@@ -18,7 +18,7 @@ export default async function AdminPage() {
     data: { user },
   } = await ssrClient.auth.getUser();
 
-  const [sessionsRes, clientsRes, tasksRes, salesReps] = await Promise.all([
+  const [sessionsRes, clientsRes, tasksRes, salesReps, notNeededRes] = await Promise.all([
     supabase
       .from("form_sessions")
       .select("*")
@@ -38,6 +38,13 @@ export default async function AdminPage() {
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: false }),
     listSalesReps(),
+    // Count of rep-flagged "not needed" tasks awaiting admin cleanup. Drives
+    // the red badge on the Archived nav link — gives the admin a one-glance
+    // signal that there's something to review in /admin/archived.
+    supabase
+      .from("tasks")
+      .select("*", { count: "exact", head: true })
+      .eq("sales_outcome", "not_needed"),
   ]);
 
   if (sessionsRes.error)
@@ -62,6 +69,7 @@ export default async function AdminPage() {
           tasks={(tasksRes.data as TaskWithClient[]) || []}
           salesReps={salesReps.map((r) => ({ id: r.id, first_name: r.first_name, last_name: r.last_name, email: r.email, active: r.active }))}
           userEmail={user?.email || ""}
+          notNeededCount={notNeededRes.count ?? 0}
         />
       </div>
     </div>

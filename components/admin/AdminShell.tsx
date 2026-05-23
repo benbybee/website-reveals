@@ -36,12 +36,14 @@ export function AdminShell({
   tasks: initialTasks,
   salesReps,
   userEmail,
+  notNeededCount = 0,
 }: {
   sessions: FormSession[];
   clients: Client[];
   tasks: TaskWithClient[];
   salesReps: SalesRepOption[];
   userEmail: string;
+  notNeededCount?: number;
 }) {
   const [activeTab, setActiveTab] = useState<Tab>("submissions");
   const [sessions, setSessions] = useState(initialSessions);
@@ -182,14 +184,33 @@ export function AdminShell({
               fontFamily: "var(--font-sans)",
               fontSize: "13px",
               fontWeight: 500,
-              color: "#555553",
+              color: notNeededCount > 0 ? "#b3300a" : "#555553",
               textDecoration: "none",
-              border: "1.5px solid #d8d6cf",
+              border: notNeededCount > 0 ? "1.5px solid #ffcdc0" : "1.5px solid #d8d6cf",
               borderRadius: "3px",
               padding: "6px 14px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
             }}
           >
             Archived →
+            {notNeededCount > 0 && (
+              <span
+                style={{
+                  background: "#b3300a",
+                  color: "#fff",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "10px",
+                  padding: "1px 6px",
+                  borderRadius: "10px",
+                  fontWeight: 700,
+                  lineHeight: 1.4,
+                }}
+              >
+                {notNeededCount}
+              </span>
+            )}
           </Link>
           <Link
             href="/admin/audit"

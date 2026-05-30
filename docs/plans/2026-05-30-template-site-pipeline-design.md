@@ -37,7 +37,7 @@ Everything lives under one namespace so it can be deleted wholesale without side
 
 | Table | Purpose |
 |---|---|
-| `tpl_industries` | Own taxonomy (independent of WR's `industries` table): `slug`, `display_name`, `google_categories[]` (Maps category strings to pull), `sl_enum` (value SL expects for template selection). |
+| `tpl_industries` | Own taxonomy (independent of WR's `industries` table): `slug`, `display_name`, `google_categories[]` (Maps category strings to pull), `sl_slug` (the controlled-vocabulary `industry_slug` SL's template library matches on — e.g. `home-services`, `legal`, `restaurant`). |
 | `tpl_campaigns` | One scrape request: industry, `locations[]`, `target_count`, `audit_enabled`, status, counts (scraped/qualified/incomplete/pushed), cost rollup. |
 | `tpl_prospects` | One row per real business = canonical record. Stores SL's exact normalized JSON in a `record` JSONB column **plus** promoted columns for filtering: `business_name`, `city`, `state`, `phone`, `website_status` (`none`/`stale`/`has_site`), `confidence`, `completeness`, `stage`, `agent_id`. `source_id` = stable dedupe key. |
 | `tpl_prospect_assets` | Logo/photo rows: `src_url`, `slot`, `width`, `height`, `fetch_verified` flag. Keeps asset verification auditable. |
@@ -68,13 +68,14 @@ A 3,500-record campaign runs as Trigger.dev v3 jobs so it survives timeouts/retr
 
 ### Stage 3 — Enrich (data-quality core)
 - **Facebook/social pass:** find the business's FB page, pull profile image (logo), cover photo, hours, about. Fill `logo`, extra `photos`, gaps in `hours`. (Most no-website local businesses have a FB page — highest-yield source for the exact fields Google Maps can't provide.)
-- **Color extraction:** derive `brand_colors.primary/accent` deterministically from the logo (no AI).
+- **Color extraction:** derive all four `brand_colors` tokens (`primary`, `accent`, `neutral_dark`, `neutral_light`) deterministically from the logo (no AI) — the documented hex shape SL's `tokens.css` overlay requires.
+- **Services extraction:** capture the business's real `services[]` as `{name, description}` from the scrape (GBP categories/attributes) + Facebook "services" section. SL flagged this as the highest-value field for killing `/services` page hallucination.
 - **Normalize on our side** to SL's spec: phone → E.164, state → 2-letter, hours → 24h structured, URLs → absolute + fetchable. SL never cleans data.
 - **Asset verification:** HEAD-check every logo/photo URL is live + fetchable; store dimensions; drop dead/auth-walled URLs so SL never gets a broken hero. Mark `fetch_verified` in `tpl_prospect_assets`.
 
 ### Stage 4 — Score & gate
 - `completeness` = which required fields present. `confidence` = identity-anchor strength (name + address + phone).
-- **Gate (build will not run without these):** `source_id`, `business_name`, `industry`, `address`, `phone`, AND ≥1 verified `{logo | photos}`.
+- **Gate (build will not run without these):** `source_id`, `business_name`, `industry_slug`, `address`, `phone`, AND ≥1 verified `{logo | photos}`.
 - Pass → `qualified`. Short → `incomplete` (routed out of batch, never pushed). Low identity confidence → flagged.
 
 ### On-request targeted backfill ("Enrich more")
@@ -114,30 +115,65 @@ SL **requires batch delivery** ("campaign batches, not one-at-a-time") and left 
 - **Callback:** `app/api/templates/sl-callback` (separate from the existing `/api/sl-callback`) receives per-record build status → updates `tpl_prospects.stage` to `building → live` (+ stores preview URL for agents) or `build_failed`. Fully decoupled from the form-flow callback.
 - **Idempotency:** stable `source_id` → re-push updates existing SL sites, never duplicates.
 
-### Canonical record shape (SL spec)
+### Canonical record shape (WR-internal, stored in `tpl_prospects.record`)
 ```json
 {
   "source_id": "wr-tpl-{place_id}",
   "scraped_at": "ISO-8601Z",
   "confidence": 0.0,
   "business_name": "", "legal_name": "",
-  "industry": "<tpl_industries.sl_enum>",
+  "industry_raw": "Pest control service",
+  "industry_slug": "<tpl_industries.sl_slug>",
   "address": { "street": "", "city": "", "state": "XX", "zip": "", "country": "US" },
   "phone": "+1XXXXXXXXXX", "email": "", "website": "",
   "hours": [ { "day": "mon", "open": "08:00", "close": "17:00" } ],
   "geo": { "lat": 0.0, "lng": 0.0 },
-  "services": [ { "name": "", "desc": "" } ],
+  "services": [ { "name": "", "description": "" } ],
   "logo": { "src_url": "", "width": 0, "height": 0 },
-  "brand_colors": { "primary": "#......", "accent": "#......" },
-  "photos": [ { "slot": "hero", "src_url": "", "credit": null } ],
+  "brand_colors": { "primary": "#......", "accent": "#......", "neutral_dark": "#......", "neutral_light": "#......" },
+  "photos": [ { "slot": "hero", "src_url": "", "alt": "", "credit": null } ],
   "description": "", "socials": { "facebook": "", "instagram": "" },
   "sources": [ "" ]
 }
 ```
-**Minimum viable record (gate):** `source_id`, `business_name`, `industry`, `address`, `phone`, and ≥1 of `{logo, photos}`.
+**Minimum viable record (gate):** `source_id`, `business_name`, `industry_slug`, `address`, `phone`, and ≥1 of `{logo, photos}`.
+
+### SL delivery shape — map canonical → `prep.brief.*`
+SL's Astro Template worker reads a nested `prep` object (source of truth: SL's `scripts/fetch-prep.mjs`, the `/api/internal/builds/{id}/preparation` response). The batch adapter maps each canonical record into that shape:
+
+| Canonical field | → SL `prep` path | Notes |
+|---|---|---|
+| `industry_raw` | `brief.business.industry` | Free-text, fallback signal. |
+| `industry_slug` | `brief.business.industry_slug` | **NEW ask.** Controlled vocab; drives deterministic template `select`. Without it SL defaults every business to one template. |
+| `business_name` | `brief.business.name` | Hard-fails SL build if missing. |
+| `description` | `brief.business.description` | Headline/meta seed. |
+| `services[]` `{name, description}` | `brief.business.services[]` | **NEW ask + highest-value.** Real services from scrape → kills `/services` page hallucination. |
+| `address` | `brief.contact.address` | LocalBusiness schema + contact page. |
+| `phone` | `brief.contact.phone` | `tel:` CTA + schema. |
+| `email` | `brief.contact.email` | Contact page. |
+| `hours` | `brief.contact.hours` | Often empty today — see reliability matrix. |
+| `brand_colors` `{primary, accent, neutral_dark, neutral_light}` | `brief.brand.colors` | **NEW ask.** Documented 4-key hex shape → deterministic `tokens.css` overlay. Resolution order SL uses: `brief.brand.colors` → `current_site_brand.colors` → `logo_colors` → template default. |
+| `logo` `.src_url` | `current_site_brand.logo_url` | **NEW reliability ask.** Often null for scraped businesses; we fill via the Facebook pass. |
+| `photos[]` `{slot, src_url, alt}` | `stock_photos[]` | `slot` enum must align to template image slots (`hero`, `about`, `service-1`, …); SL downloads `src_url` → `local_path`. |
+| `geo` | (schema/maps) | Optional. |
+
+**Stage 1 (speculative Cloudflare) does NOT need `kura_input`** (`slug`/`owner_email`/`owner_name`). That block is required only at **Stage 2 conversion**, after the owner scans the postcard QR and converts — at which point WR supplies it. So speculative batches omit it cleanly (we have no owner contact yet).
+
+### Reliability matrix — what WR guarantees vs. best-effort
+SL keeps model/template fallbacks for best-effort fields; guaranteed fields let SL go fully deterministic.
+
+| Field | WR guarantee | Basis |
+|---|---|---|
+| `business_name`, `address`, `phone` | **Guaranteed** for any `qualified` record | They're in the completeness gate; nothing pushes without them. |
+| `industry_slug` | **Guaranteed** | Campaign is scoped to one known industry → slug is correct by construction. |
+| `photos` (≥1) | **Guaranteed** (when no logo) | Gate requires `{logo OR photos}`; GBP almost always has photos. |
+| `logo`, `brand_colors` | **Best-effort** | From Facebook pass + color extraction; may be absent → SL falls back. |
+| `hours` | **Best-effort** | From GBP/Facebook; can be empty. |
+| `services[]` | **Best-effort (target high)** | From scrape/enrichment; backfillable on demand. |
+| `email`, `socials`, `description` | **Best-effort** | Opportunistic. |
 
 ### What WR does NOT do (per SL)
-No marketing copy / taglines / About prose (pre-authored in template). No template selection or design (SL picks from `industry`). No deploy/hosting (SL + Cloudflare). Send facts, not voice.
+No marketing copy / taglines / About prose (pre-authored in template). No template selection or design (SL picks from `industry_slug`). No deploy/hosting (SL + Cloudflare). Fonts are template-fixed — never sent. Send facts, not voice.
 
 ---
 

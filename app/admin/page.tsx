@@ -4,6 +4,7 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import type { FormSession } from "@/lib/supabase/types";
 import type { Client, TaskWithClient } from "@/lib/types/client-tasks";
 import { listSalesReps } from "@/lib/sales-reps";
+import { templatesEnabled } from "@/lib/templates/config";
 
 export const dynamic = "force-dynamic";
 
@@ -70,6 +71,7 @@ export default async function AdminPage() {
           salesReps={salesReps.map((r) => ({ id: r.id, first_name: r.first_name, last_name: r.last_name, email: r.email, active: r.active }))}
           userEmail={user?.email || ""}
           notNeededCount={notNeededRes.count ?? 0}
+          templatesEnabled={templatesEnabled()}
         />
       </div>
     </div>

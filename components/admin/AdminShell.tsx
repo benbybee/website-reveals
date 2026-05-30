@@ -37,6 +37,7 @@ export function AdminShell({
   salesReps,
   userEmail,
   notNeededCount = 0,
+  templatesEnabled = false,
 }: {
   sessions: FormSession[];
   clients: Client[];
@@ -44,6 +45,7 @@ export function AdminShell({
   salesReps: SalesRepOption[];
   userEmail: string;
   notNeededCount?: number;
+  templatesEnabled?: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<Tab>("submissions");
   const [sessions, setSessions] = useState(initialSessions);
@@ -242,6 +244,23 @@ export function AdminShell({
           >
             Billing →
           </Link>
+          {templatesEnabled && (
+            <Link
+              href="/admin/templates"
+              style={{
+                fontFamily: "var(--font-sans)",
+                fontSize: "13px",
+                fontWeight: 500,
+                color: "#555553",
+                textDecoration: "none",
+                border: "1.5px solid #d8d6cf",
+                borderRadius: "3px",
+                padding: "6px 14px",
+              }}
+            >
+              Template Sites →
+            </Link>
+          )}
           <span
             style={{
               fontFamily: "var(--font-sans)",

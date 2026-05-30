@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "screenshots": "node scripts/capture-screenshots.mjs"
   },
   "dependencies": {
@@ -32,6 +34,7 @@
     "playwright": "^1.58.2",
     "tailwindcss": "^4",
     "trigger.dev": "^4.4.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }

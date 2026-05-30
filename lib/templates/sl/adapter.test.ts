@@ -14,7 +14,7 @@ const chunks: BatchChunk<Rec>[] = [
 
 describe("pushBatch — post transport", () => {
   it("HMAC-signs and POSTs each chunk; isolates per-chunk failure", async () => {
-    const fetchMock = vi.fn(async (_url: string, opts: { body: string }) => {
+    const fetchMock = vi.fn(async (_url: string, opts: { body: string; headers: Record<string, string> }) => {
       const body = JSON.parse(opts.body);
       if (body.chunk_index === 1) return new Response("boom", { status: 500 });
       return new Response(JSON.stringify({ ok: true }), { status: 200 });

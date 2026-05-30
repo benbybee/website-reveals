@@ -10,7 +10,7 @@ export interface ScoreResult {
 
 export function scoreRecord(r: CanonicalRecord): ScoreResult {
   const missing: string[] = [];
-  for (const k of REQUIRED) if (!present((r as Record<string, unknown>)[k])) missing.push(k);
+  for (const k of REQUIRED) if (!present((r as unknown as Record<string, unknown>)[k])) missing.push(k);
   const hasAddr = !!r.address && present(r.address.street) && present(r.address.city) && present(r.address.state);
   if (!hasAddr && !missing.includes("address")) missing.push("address");
   const hasAsset = !!r.logo?.src_url || (r.photos?.length ?? 0) > 0;
@@ -39,7 +39,7 @@ function presentField(r: CanonicalRecord, f: string): boolean {
   if (f === "hours") return (r.hours?.length ?? 0) > 0;
   if (f === "services") return (r.services?.length ?? 0) > 0;
   if (f === "brand_colors") return !!r.brand_colors?.primary;
-  return present((r as Record<string, unknown>)[f]);
+  return present((r as unknown as Record<string, unknown>)[f]);
 }
 function round2(n: number): number {
   return Math.round(n * 100) / 100;

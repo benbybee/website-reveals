@@ -1,0 +1,325 @@
+[
+  {
+    "title": "CAPE Pest Control",
+    "subTitle": null,
+    "description": null,
+    "price": null,
+    "categoryName": "Pest control service",
+    "address": "725 W Elliot Rd Ste 102, Gilbert, AZ 85233",
+    "neighborhood": "Ventura Professional Village Condominium",
+    "street": "725 W Elliot Rd Ste 102",
+    "city": "Gilbert",
+    "postalCode": "85233",
+    "state": "Arizona",
+    "countryCode": "US",
+    "website": "https://www.capepest.co/",
+    "phone": "(480) 428-2720",
+    "phoneUnformatted": "+14804282720",
+    "claimThisBusiness": false,
+    "location": {
+      "lat": 33.3493354,
+      "lng": -111.8056638
+    },
+    "locatedIn": null,
+    "floor": null,
+    "plusCode": null,
+    "menu": null,
+    "servicesLink": null,
+    "totalScore": 5,
+    "permanentlyClosed": false,
+    "temporarilyClosed": false,
+    "placeId": "ChIJn4m1mwCpK4cRsc_5hGJDB2M",
+    "categories": [
+      "Pest control service"
+    ],
+    "fid": "0x872ba9009bb5899f:0x6307436284f9cfb1",
+    "cid": "7135746225008660401",
+    "reviewsCount": 508,
+    "imagesCount": 237,
+    "imageCategories": [],
+    "scrapedAt": "2026-05-30T14:35:48.052Z",
+    "reserveTableUrl": null,
+    "googleFoodUrl": null,
+    "hotelStars": null,
+    "hotelDescription": null,
+    "checkInDate": null,
+    "checkOutDate": null,
+    "hotelAds": [],
+    "popularTimesLiveText": null,
+    "popularTimesLivePercent": null,
+    "popularTimesHistogram": {},
+    "openingHours": [
+      {
+        "day": "Monday",
+        "hours": "8 AM to 6 PM"
+      },
+      {
+        "day": "Tuesday",
+        "hours": "8 AM to 6 PM"
+      },
+      {
+        "day": "Wednesday",
+        "hours": "8 AM to 6 PM"
+      },
+      {
+        "day": "Thursday",
+        "hours": "8 AM to 6 PM"
+      },
+      {
+        "day": "Friday",
+        "hours": "8 AM to 6 PM"
+      },
+      {
+        "day": "Saturday",
+        "hours": "Closed"
+      },
+      {
+        "day": "Sunday",
+        "hours": "Closed"
+      }
+    ],
+    "peopleAlsoSearch": [],
+    "placesTags": [],
+    "reviewsTags": [],
+    "additionalInfo": {
+      "Planning": [
+        {
+          "Appointment required": true
+        }
+      ]
+    },
+    "gasPrices": [],
+    "url": "https://www.google.com/maps/search/?api=1&query=CAPE%20Pest%20Control&query_place_id=ChIJn4m1mwCpK4cRsc_5hGJDB2M",
+    "searchPageUrl": "https://www.google.com/maps/search/pest%20control/@33.324765543174756,-111.83268799443816,14z?hl=en",
+    "searchString": "pest control",
+    "language": "en",
+    "rank": 7,
+    "isAdvertisement": false,
+    "imageUrl": "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHqTsLqOYvUO6EDhJ9fZIKuENuIcNHPmZdrni3HNKFNPYsvjkrobR7R-ZNxmbpWmQLJGNlRcodhJm0OOuRj2hC2lHtYmAJ5Y1gu0Ht5H1eB-tPkfpkgfHH2ihje0QHA8Ud_IU0=w408-h306-k-no",
+    "kgmid": "/g/11sk1t37mb"
+  },
+  {
+    "title": "Spark Pest Control - Gilbert Office",
+    "subTitle": null,
+    "description": null,
+    "price": null,
+    "categoryName": "Pest control service",
+    "address": "700 N Neely St Suite 21, Gilbert, AZ 85233",
+    "neighborhood": "Golden Key Plaza",
+    "street": "700 N Neely St Suite 21",
+    "city": "Gilbert",
+    "postalCode": "85233",
+    "state": "Arizona",
+    "countryCode": "US",
+    "website": "https://sparkpest.com/pest-control-services-in-gilbert/",
+    "phone": "(480) 619-5850",
+    "phoneUnformatted": "+14806195850",
+    "claimThisBusiness": false,
+    "location": {
+      "lat": 33.3608845,
+      "lng": -111.7989655
+    },
+    "locatedIn": null,
+    "floor": null,
+    "plusCode": null,
+    "menu": null,
+    "servicesLink": null,
+    "totalScore": 5,
+    "permanentlyClosed": false,
+    "temporarilyClosed": false,
+    "placeId": "ChIJy3QFXjOeKYkRrt5jXYzcifo",
+    "categories": [
+      "Pest control service"
+    ],
+    "fid": "0x89299e335e0574cb:0xfa89dc8c5d63deae",
+    "cid": "18053203076711702190",
+    "reviewsCount": 112,
+    "imagesCount": 37,
+    "imageCategories": [],
+    "scrapedAt": "2026-05-30T14:35:48.053Z",
+    "reserveTableUrl": null,
+    "googleFoodUrl": null,
+    "hotelStars": null,
+    "hotelDescription": null,
+    "checkInDate": null,
+    "checkOutDate": null,
+    "hotelAds": [],
+    "popularTimesLiveText": null,
+    "popularTimesLivePercent": null,
+    "popularTimesHistogram": {},
+    "openingHours": [
+      {
+        "day": "Monday",
+        "hours": "Open 24 hours"
+      },
+      {
+        "day": "Tuesday",
+        "hours": "Open 24 hours"
+      },
+      {
+        "day": "Wednesday",
+        "hours": "Open 24 hours"
+      },
+      {
+        "day": "Thursday",
+        "hours": "Open 24 hours"
+      },
+      {
+        "day": "Friday",
+        "hours": "Open 24 hours"
+      },
+      {
+        "day": "Saturday",
+        "hours": "Open 24 hours"
+      },
+      {
+        "day": "Sunday",
+        "hours": "Closed"
+      }
+    ],
+    "peopleAlsoSearch": [],
+    "placesTags": [],
+    "reviewsTags": [],
+    "additionalInfo": {
+      "Accessibility": [
+        {
+          "Wheelchair accessible parking lot": true
+        }
+      ],
+      "Planning": [
+        {
+          "Appointment required": true
+        }
+      ]
+    },
+    "gasPrices": [],
+    "url": "https://www.google.com/maps/search/?api=1&query=Spark%20Pest%20Control%20-%20Gilbert%20Office&query_place_id=ChIJy3QFXjOeKYkRrt5jXYzcifo",
+    "searchPageUrl": "https://www.google.com/maps/search/pest%20control/@33.324765543174756,-111.83268799443816,14z?hl=en",
+    "searchString": "pest control",
+    "language": "en",
+    "rank": 13,
+    "isAdvertisement": false,
+    "imageUrl": "https://lh3.googleusercontent.com/gps-cs-s/APNQkAHc3lzkorEuEsO-QIyOWvcHSnvqm8Tm8lyxrhHwfib6EWzotejgWZAp976qHqcoJtSSpMHImsMGjDH8g2uIGrZ1D_bH-Iw-iZZxwg2sYbM8fYY-ELXiKNoMhlbcStLZo8ptaAPHl2UAdyNS=w408-h305-k-no",
+    "kgmid": "/g/11xh2sv260"
+  },
+  {
+    "title": "Magic Pest Control",
+    "subTitle": null,
+    "description": null,
+    "price": null,
+    "categoryName": "Pest control service",
+    "address": "700 N Golden Key St, Gilbert, AZ 85233",
+    "neighborhood": "Golden Key Plaza",
+    "street": "700 N Golden Key St",
+    "city": "Gilbert",
+    "postalCode": "85233",
+    "state": "Arizona",
+    "countryCode": "US",
+    "website": "https://www.magicpest.com/?utm_source=Google&utm_medium=Organic&utm_campaign=GMB",
+    "phone": "(602) 878-6761",
+    "phoneUnformatted": "+16028786761",
+    "claimThisBusiness": false,
+    "location": {
+      "lat": 33.3611393,
+      "lng": -111.802295
+    },
+    "locatedIn": null,
+    "floor": null,
+    "plusCode": null,
+    "menu": null,
+    "servicesLink": null,
+    "totalScore": 4.9,
+    "permanentlyClosed": false,
+    "temporarilyClosed": false,
+    "placeId": "ChIJt7Ih_yOsK4cRVuC70SBWOFM",
+    "categories": [
+      "Pest control service"
+    ],
+    "fid": "0x872bac23ff21b2b7:0x53385620d1bbe056",
+    "cid": "5996637602801508438",
+    "reviewsCount": 1211,
+    "imagesCount": 130,
+    "imageCategories": [],
+    "scrapedAt": "2026-05-30T14:35:48.053Z",
+    "reserveTableUrl": null,
+    "googleFoodUrl": null,
+    "hotelStars": null,
+    "hotelDescription": null,
+    "checkInDate": null,
+    "checkOutDate": null,
+    "hotelAds": [],
+    "popularTimesLiveText": null,
+    "popularTimesLivePercent": null,
+    "popularTimesHistogram": {},
+    "openingHours": [
+      {
+        "day": "Monday",
+        "hours": "8 AM to 5 PM"
+      },
+      {
+        "day": "Tuesday",
+        "hours": "8 AM to 5 PM"
+      },
+      {
+        "day": "Wednesday",
+        "hours": "8 AM to 5 PM"
+      },
+      {
+        "day": "Thursday",
+        "hours": "8 AM to 5 PM"
+      },
+      {
+        "day": "Friday",
+        "hours": "8 AM to 5 PM"
+      },
+      {
+        "day": "Saturday",
+        "hours": "8 AM to 2 PM"
+      },
+      {
+        "day": "Sunday",
+        "hours": "Closed"
+      }
+    ],
+    "peopleAlsoSearch": [],
+    "placesTags": [],
+    "reviewsTags": [],
+    "additionalInfo": {
+      "From the business": [
+        {
+          "Identifies as Latino-owned": true
+        },
+        {
+          "Identifies as veteran-owned": true
+        }
+      ],
+      "Service options": [
+        {
+          "Online estimates": true
+        },
+        {
+          "Onsite services": true
+        }
+      ],
+      "Accessibility": [
+        {
+          "Wheelchair accessible parking lot": true
+        }
+      ],
+      "Planning": [
+        {
+          "Appointment required": true
+        }
+      ]
+    },
+    "gasPrices": [],
+    "url": "https://www.google.com/maps/search/?api=1&query=Magic%20Pest%20Control&query_place_id=ChIJt7Ih_yOsK4cRVuC70SBWOFM",
+    "searchPageUrl": "https://www.google.com/maps/search/pest%20control/@33.324765543174756,-111.83268799443816,14z?hl=en",
+    "searchString": "pest control",
+    "language": "en",
+    "rank": 14,
+    "isAdvertisement": false,
+    "imageUrl": "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEDoiYTbr-8vCiu_qjiI6BLu2Ouinu-KamT_krDfkfnKK07NyPyTqTwoN_KcCkPRLS-HRgEpgyVnSD0D0gdEYTSsPX0WnxUpVBVU5E5ckDG5DI5HJS41ocZR3bBPdCTEi809ADnMMxw4QzS=w408-h272-k-no",
+    "kgmid": "/g/1263m_zg2"
+  }
+]

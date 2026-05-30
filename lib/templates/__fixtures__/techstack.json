@@ -1,0 +1,21 @@
+[
+  {
+    "url": "https://www.capepest.co/",
+    "technologies": [
+      {
+        "name": "HSTS",
+        "category": "Security",
+        "version": null,
+        "confidence": "high",
+        "detectedVia": "header:strict-transport-security"
+      }
+    ],
+    "techCount": 1,
+    "categories": [
+      "Security"
+    ],
+    "status": "success",
+    "statusCode": 200,
+    "error": null
+  }
+]

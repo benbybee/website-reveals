@@ -1,0 +1,71 @@
+[
+  {
+    "auditType": "google-lighthouse",
+    "device": "desktop",
+    "categories": [
+      "performance",
+      "accessibility",
+      "best-practices",
+      "seo"
+    ],
+    "results": [
+      {
+        "url": "https://www.capepest.co/",
+        "success": true,
+        "fetchTime": "2026-05-30T14:40:50.646Z",
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/148.0.0.0 Safari/537.36",
+        "device": "desktop",
+        "scores": {
+          "performance": {
+            "title": "Performance",
+            "score": 72
+          },
+          "accessibility": {
+            "title": "Accessibility",
+            "score": 74
+          },
+          "best-practices": {
+            "title": "Best Practices",
+            "score": 81
+          },
+          "seo": {
+            "title": "SEO",
+            "score": 92
+          }
+        },
+        "metrics": {
+          "firstContentfulPaint": {
+            "value": 944.796,
+            "displayValue": "0.9 s",
+            "score": 0.89
+          },
+          "largestContentfulPaint": {
+            "value": 10943.632499999992,
+            "displayValue": "10.9 s",
+            "score": 0
+          },
+          "speedIndex": {
+            "value": 1682.39738441228,
+            "displayValue": "1.7 s",
+            "score": 0.76
+          },
+          "timeToInteractive": {
+            "value": 10960.981749999992,
+            "displayValue": "11.0 s",
+            "score": 0.02
+          },
+          "totalBlockingTime": {
+            "value": 0,
+            "displayValue": "0 ms",
+            "score": 1
+          },
+          "cumulativeLayoutShift": {
+            "value": 0.002348,
+            "displayValue": "0.002",
+            "score": 1
+          }
+        }
+      }
+    ]
+  }
+]

@@ -1,33 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { verifyCallback } from "@/lib/sitelaunchr";
-import { templatesEnabled } from "@/lib/templates/config";
+import { templatesEnabled, SL_TEMPLATE_HMAC_SECRET } from "@/lib/templates/config";
 import { slStatusToStage } from "@/lib/templates/sl/callbackStatus";
 
-interface RecordStatus {
-  source_id: string;
-  status: string;
-  preview_url?: string | null;
-  error?: string | null;
-}
-
+// SL posts one flat callback per phase transition (not a batch). We key on the
+// echoed external_id (== our source_id). Only the fields we consume are typed;
+// SL sends more (wp_admin_url, kura_*, github_run_url, …) which we ignore.
 interface TplCallbackBody {
-  batch_id?: string;
-  records: RecordStatus[];
+  build_id?: string;
+  external_id?: string;
+  source_id?: string; // tolerate either spelling for the dedup key
+  status: string;
+  // SL's terminal preview URL arrives as site_url (there is no preview_url field).
+  site_url?: string | null;
+  error_message?: string | null;
 }
 
 /**
  * SL build-status callback for the Template Site pipeline. Fully separate from
- * the form-flow /api/sl-callback handler. Verifies HMAC + timestamp (reusing
- * SITELAUNCHR_HMAC_SECRET), then applies per-record stage transitions on
- * tpl_prospects keyed by stable source_id.
+ * the form-flow /api/sl-callback handler. Verifies HMAC + timestamp using the
+ * wr-template source's own secret (SL_TEMPLATE_HMAC_SECRET — wr-template is a
+ * distinct SL source from `wr`, signed with its own secret), then applies the
+ * per-build stage transition on tpl_prospects keyed by stable source_id.
  */
 export async function POST(req: NextRequest) {
   if (!templatesEnabled()) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  const hmacSecret = (process.env.SITELAUNCHR_HMAC_SECRET || "").trim();
+  const hmacSecret = SL_TEMPLATE_HMAC_SECRET();
   if (!hmacSecret) {
     return NextResponse.json({ error: "Server not configured" }, { status: 500 });
   }
@@ -51,45 +53,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
 
-  if (!Array.isArray(body.records) || body.records.length === 0) {
-    return NextResponse.json({ error: "missing_records" }, { status: 400 });
+  const key = body.external_id ?? body.source_id;
+  if (!key) {
+    return NextResponse.json({ error: "missing_external_id" }, { status: 400 });
+  }
+
+  const stage = slStatusToStage(body.status);
+  if (!stage) {
+    // Unrecognized phase — ack so SL stops retrying, but change nothing.
+    return NextResponse.json({ ok: true, applied: 0, ignored: 1 });
   }
 
   const supabase = createServerClient();
-  const applied: string[] = [];
-  const ignored: string[] = [];
-
-  for (const rec of body.records) {
-    const stage = slStatusToStage(rec.status);
-    if (!rec.source_id || !stage) {
-      ignored.push(rec.source_id ?? "(no source_id)");
-      continue;
-    }
-
-    const { data: existing } = await supabase
-      .from("tpl_prospects")
-      .select("record")
-      .eq("source_id", rec.source_id)
-      .maybeSingle();
-    if (!existing) {
-      ignored.push(rec.source_id);
-      continue;
-    }
-
-    const record = (existing.record as Record<string, unknown>) || {};
-    if (rec.preview_url) record.preview_url = rec.preview_url;
-    if (stage === "build_failed" && rec.error) record.build_error = String(rec.error).slice(0, 500);
-
-    const { error: updErr } = await supabase
-      .from("tpl_prospects")
-      .update({ stage, record, updated_at: new Date().toISOString() })
-      .eq("source_id", rec.source_id);
-    if (updErr) {
-      ignored.push(rec.source_id);
-      continue;
-    }
-    applied.push(rec.source_id);
+  const { data: existing } = await supabase
+    .from("tpl_prospects")
+    .select("record")
+    .eq("source_id", key)
+    .maybeSingle();
+  if (!existing) {
+    return NextResponse.json({ ok: true, applied: 0, ignored: 1 });
   }
 
-  return NextResponse.json({ ok: true, applied: applied.length, ignored: ignored.length });
+  const record = (existing.record as Record<string, unknown>) || {};
+  if (body.build_id) record.sl_build_id = body.build_id;
+  // SL's site_url is the pages.dev preview; surface it as preview_url, which the
+  // sales board already reads for its "view" link.
+  if (body.site_url) record.preview_url = body.site_url;
+  if (stage === "build_failed" && body.error_message) {
+    record.build_error = String(body.error_message).slice(0, 500);
+  }
+
+  const { error: updErr } = await supabase
+    .from("tpl_prospects")
+    .update({ stage, record, updated_at: new Date().toISOString() })
+    .eq("source_id", key);
+  if (updErr) {
+    return NextResponse.json({ error: "update_failed" }, { status: 500 });
+  }
+
+  return NextResponse.json({ ok: true, applied: 1, ignored: 0 });
 }

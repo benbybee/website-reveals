@@ -1,48 +1,78 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { pushBatch } from "./adapter";
-import type { BatchChunk } from "./chunk";
+import { pushBuilds } from "./adapter";
+import type { BuildPayload } from "./toBuildPayload";
 
 afterEach(() => vi.restoreAllMocks());
 
-interface Rec {
-  source_id: string;
-}
-const chunks: BatchChunk<Rec>[] = [
-  { campaign_id: "c", batch_id: "b", chunk_index: 0, chunk_total: 2, records: [{ source_id: "s0" }] },
-  { campaign_id: "c", batch_id: "b", chunk_index: 1, chunk_total: 2, records: [{ source_id: "s1" }] },
+const builds: BuildPayload[] = [
+  { external_id: "wr-tpl-0", form_type: "quick", brief: { business_name: "A", industry: "home-services" } },
+  { external_id: "wr-tpl-1", form_type: "quick", brief: { business_name: "B", industry: "home-services" } },
 ];
 
-describe("pushBatch — post transport", () => {
-  it("HMAC-signs and POSTs each chunk; isolates per-chunk failure", async () => {
+describe("pushBuilds — post transport", () => {
+  it("HMAC-signs and POSTs each build as wr-template; isolates per-build failure", async () => {
     const fetchMock = vi.fn(async (_url: string, opts: { body: string; headers: Record<string, string> }) => {
       const body = JSON.parse(opts.body);
-      if (body.chunk_index === 1) return new Response("boom", { status: 500 });
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      if (body.external_id === "wr-tpl-1") return new Response("boom", { status: 500 });
+      return new Response(JSON.stringify({ build_id: "b-0", status: "queued" }), { status: 202 });
     });
     vi.stubGlobal("fetch", fetchMock as never);
 
-    const out = await pushBatch(chunks, {
+    const out = await pushBuilds(builds, {
       transport: "post",
-      batchUrl: "https://sl.example/batch",
+      buildUrl: "https://sl.example/api/builds",
+      apiKey: "key",
       hmacSecret: "secret",
     });
 
     expect(out.transport).toBe("post");
     expect(fetchMock).toHaveBeenCalledTimes(2);
     const [, opts0] = fetchMock.mock.calls[0];
+    expect(opts0.headers["x-source-id"]).toBe("wr-template");
+    expect(opts0.headers["x-api-key"]).toBe("key");
     expect(opts0.headers["x-signature"]).toBeDefined();
     expect(opts0.headers["x-timestamp"]).toBeDefined();
-    expect(out.results[0]).toMatchObject({ chunk_index: 0, ok: true });
-    expect(out.results[1]).toMatchObject({ chunk_index: 1, ok: false });
+    expect(out.results[0]).toMatchObject({ external_id: "wr-tpl-0", ok: true, build_id: "b-0" });
+    expect(out.results[1]).toMatchObject({ external_id: "wr-tpl-1", ok: false, status: 500 });
+  });
+
+  it("treats a 200 duplicate response as success", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ build_id: "b-x", status: "queued", duplicate: true }), { status: 200 })) as never,
+    );
+    const out = await pushBuilds([builds[0]], { transport: "post", buildUrl: "https://x", apiKey: "k", hmacSecret: "s" });
+    expect(out.results[0]).toMatchObject({ ok: true, duplicate: true, build_id: "b-x" });
+  });
+
+  it("retries on 429 honoring retry-after, then succeeds", async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls++;
+        if (calls === 1) return new Response("rate", { status: 429, headers: { "retry-after": "0" } });
+        return new Response(JSON.stringify({ build_id: "b-r", status: "queued" }), { status: 202 });
+      }) as never,
+    );
+    const out = await pushBuilds([builds[0]], { transport: "post", buildUrl: "https://x", apiKey: "k", hmacSecret: "s", maxRetries: 2 });
+    expect(calls).toBe(2);
+    expect(out.results[0]).toMatchObject({ ok: true, build_id: "b-r" });
+  });
+
+  it("requires api key + secret + url for the post transport", async () => {
+    await expect(pushBuilds([builds[0]], { transport: "post", buildUrl: "https://x", hmacSecret: "s" })).rejects.toThrow(
+      /SL_TEMPLATE_API_KEY/,
+    );
   });
 });
 
-describe("pushBatch — table transport", () => {
-  it("writes the artifact via db and reports all chunks ok", async () => {
-    const updates: unknown[] = [];
+describe("pushBuilds — table transport", () => {
+  it("writes the builds artifact via db and reports all builds ok", async () => {
+    const updates: { sl_response: { builds: unknown[] } }[] = [];
     const db = {
       from: () => ({
-        update: (row: unknown) => ({
+        update: (row: { sl_response: { builds: unknown[] } }) => ({
           eq: () => {
             updates.push(row);
             return Promise.resolve({ error: null });
@@ -50,38 +80,10 @@ describe("pushBatch — table transport", () => {
         }),
       }),
     };
-    const out = await pushBatch(chunks, { transport: "table", db: db as never, batchRowId: "row-1" });
+    const out = await pushBuilds(builds, { transport: "table", db: db as never, batchRowId: "row-1" });
     expect(out.transport).toBe("table");
     expect(out.results.every((r) => r.ok)).toBe(true);
     expect(updates).toHaveLength(1);
-  });
-});
-
-describe("pushBatch — identical record JSON across transports", () => {
-  it("serializes the same records regardless of transport", async () => {
-    let postedRecords: unknown;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_url: string, opts: { body: string }) => {
-        postedRecords = JSON.parse(opts.body).records;
-        return new Response("{}", { status: 200 });
-      }) as never,
-    );
-    await pushBatch([chunks[0]], { transport: "post", batchUrl: "https://x", hmacSecret: "s" });
-
-    let tabledRecords: unknown;
-    const db = {
-      from: () => ({
-        update: (row: { sl_response: { chunks: { records: unknown }[] } }) => ({
-          eq: () => {
-            tabledRecords = row.sl_response.chunks[0].records;
-            return Promise.resolve({ error: null });
-          },
-        }),
-      }),
-    };
-    await pushBatch([chunks[0]], { transport: "table", db: db as never, batchRowId: "r" });
-
-    expect(postedRecords).toEqual(tabledRecords);
+    expect(updates[0].sl_response.builds).toHaveLength(2);
   });
 });

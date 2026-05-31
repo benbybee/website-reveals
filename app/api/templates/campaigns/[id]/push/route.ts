@@ -6,7 +6,6 @@ import { assembleAndPush } from "@/lib/templates/sl/push";
 
 interface PushBody {
   dryRun?: boolean;
-  chunkSize?: number;
 }
 
 /** Task 8.8 — assemble a campaign's qualified prospects and push to SL. */
@@ -33,7 +32,6 @@ export async function POST(
   try {
     const result = await assembleAndPush(tplDb(), id, {
       dryRun: body.dryRun === true,
-      chunkSize: body.chunkSize,
       transport,
     });
     return NextResponse.json({ ok: true, ...result });

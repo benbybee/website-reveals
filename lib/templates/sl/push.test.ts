@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { buildChunks, assembleAndPush } from "./push";
+import { buildPayloads, assembleAndPush } from "./push";
 import type { CanonicalRecord } from "../types";
 
 afterEach(() => vi.restoreAllMocks());
@@ -13,11 +13,12 @@ const rec: CanonicalRecord = {
   photos: [{ slot: "hero", src_url: "https://x/p.jpg" }],
 };
 
-describe("buildChunks", () => {
-  it("maps records to prep.brief and chunks them", () => {
-    const chunks = buildChunks([rec, { ...rec, source_id: "wr-tpl-2" }], "camp", "batch", 1);
-    expect(chunks.length).toBe(2);
-    expect(chunks[0].records[0]).toHaveProperty("brief.business.name", "Joe");
+describe("buildPayloads", () => {
+  it("maps records to SL per-build payloads", () => {
+    const builds = buildPayloads([rec, { ...rec, source_id: "wr-tpl-2" }]);
+    expect(builds.length).toBe(2);
+    expect(builds[0]).toHaveProperty("brief.business_name", "Joe");
+    expect(builds[0].external_id).toBe("wr-tpl-1");
   });
 });
 
@@ -47,7 +48,6 @@ describe("assembleAndPush — dry run", () => {
     const out = await assembleAndPush(db as never, "camp", { dryRun: true });
 
     expect(out.recordCount).toBe(1);
-    expect(out.chunkCount).toBe(1);
     expect(out.dryRun).toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(inserts).toHaveLength(1);

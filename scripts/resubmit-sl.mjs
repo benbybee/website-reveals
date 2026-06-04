@@ -181,13 +181,9 @@ const payload = {
 const rawBody = JSON.stringify(payload);
 
 if (process.env.DEBUG_SL_PAYLOAD === "1") {
-  console.log("\n--- Outbound brief.contact ---");
-  console.log(JSON.stringify(payload.brief.contact, null, 2));
-  console.log("--- Outbound brief.contact_email ---");
-  console.log(JSON.stringify(payload.brief.contact_email));
-  console.log("--- Outbound brief keys ---");
-  console.log(Object.keys(payload.brief));
-  console.log("--- end debug ---\n");
+  console.log("\n--- Outbound raw body ---");
+  console.log(rawBody);
+  console.log("--- end raw body ---\n");
 }
 const timestamp = String(Math.floor(Date.now() / 1000));
 const signature = createHmac("sha256", SL_SECRET).update(`${timestamp}.${rawBody}`).digest("hex");

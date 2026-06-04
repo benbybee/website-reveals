@@ -8,6 +8,7 @@ import { escapeHtml } from "@/lib/sanitize";
 import type { FormType } from "@/lib/resolve-form-type";
 import { getClientByEmail, createClient, updateClient } from "@/lib/clients";
 import { sendWelcomeEmail } from "@/lib/task-emails";
+import { createTask } from "@/lib/tasks";
 
 const ALLOWED_FORM_TYPES: FormType[] = ["quick", "standard", "in-depth"];
 
@@ -94,10 +95,12 @@ export async function POST(req: NextRequest) {
   const businessName = (form_data.business_name as string) || "Your Business";
 
   // Auto-create client from webhook submission
+  let buildTaskId: string | undefined;
   const webhookClientEmail = form_data.contact_email as string;
   if (webhookClientEmail) {
     try {
       const existingClient = await getClientByEmail(webhookClientEmail);
+      let clientId: string;
       if (!existingClient) {
         const contactName = (form_data.contact_person as string) || (form_data.contact_name as string) || "";
         const nameParts = contactName.split(" ");
@@ -111,8 +114,27 @@ export async function POST(req: NextRequest) {
           form_session_token: token,
         });
         await sendWelcomeEmail(client, pin);
-      } else if (!existingClient.form_session_token) {
-        await updateClient(existingClient.id, { form_session_token: token });
+        clientId = client.id;
+      } else {
+        if (!existingClient.form_session_token) {
+          await updateClient(existingClient.id, { form_session_token: token });
+        }
+        clientId = existingClient.id;
+      }
+
+      // Create a task to track this website build
+      try {
+        const buildTask = await createTask({
+          client_id: clientId,
+          title: `Website Build — ${businessName}`,
+          description: `Automated website build queued from external form submission.\nForm type: ${formType}`,
+          status: "backlog",
+          priority: "high",
+          tags: ["website-build", formType],
+        });
+        buildTaskId = buildTask.id;
+      } catch (taskErr) {
+        console.error("[webhook] Build task creation failed:", taskErr);
       }
     } catch (clientErr) {
       console.error("[webhook] Client auto-creation failed:", clientErr);

@@ -18,3 +18,22 @@ export const SL_TEMPLATE_BUILD_URL = () =>
 export const SL_TEMPLATE_SOURCE_ID = "wr-template";
 export const SL_TEMPLATE_API_KEY = () => (process.env.SL_TEMPLATE_API_KEY ?? "").trim();
 export const SL_TEMPLATE_HMAC_SECRET = () => (process.env.SL_TEMPLATE_HMAC_SECRET ?? "").trim();
+
+// Stage-2 conversion endpoint (POST /api/conversions on SL) — fires the Kura
+// promote when a prospect converts. Distinct route from intake (/api/builds),
+// signed with the SAME wr-template creds. Defaults to deriving the conversion
+// URL from the build URL by swapping the path, so a single SITELAUNCHR_API_URL
+// configures both; override explicitly with SL_TEMPLATE_CONVERSION_URL.
+export const SL_TEMPLATE_CONVERSION_URL = () => {
+  const explicit = (process.env.SL_TEMPLATE_CONVERSION_URL ?? "").trim();
+  if (explicit) return explicit;
+  const build = SL_TEMPLATE_BUILD_URL();
+  if (!build) return "";
+  try {
+    const u = new URL(build);
+    u.pathname = "/api/conversions";
+    return u.toString();
+  } catch {
+    return "";
+  }
+};

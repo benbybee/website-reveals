@@ -7,7 +7,13 @@ import { SalesBoard, type SalesProspect } from "@/components/admin/templates/Sal
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Sales — Template Sites" };
 
-const SALES_STAGES = ["qualified", "approved", "building", "live", "build_failed"];
+// Stages a rep can pick from the dropdown. `converted` is intentionally NOT here
+// — it's reached only via the Convert action (captures owner data + fires the
+// WR→SL conversion webhook), never a plain stage flip.
+const SELECTABLE_STAGES = ["qualified", "approved", "building", "live", "build_failed"];
+// Stages the board loads. Includes `converted` so closed-won prospects stay
+// visible after conversion.
+const BOARD_STAGES = [...SELECTABLE_STAGES, "converted"];
 
 export default async function SalesPage() {
   if (!templatesEnabled()) notFound();
@@ -20,7 +26,7 @@ export default async function SalesPage() {
   const { data } = await db
     .from("tpl_prospects")
     .select("id, business_name, city, state, phone, website, stage, agent_id, record")
-    .in("stage", SALES_STAGES)
+    .in("stage", BOARD_STAGES)
     .order("updated_at", { ascending: false })
     .limit(500);
 
@@ -39,7 +45,7 @@ export default async function SalesPage() {
   return (
     <div style={{ minHeight: "100vh", background: "#faf9f5", padding: "32px 24px 80px" }}>
       <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-        <SalesBoard prospects={prospects} userEmail={user.email ?? ""} stages={SALES_STAGES} />
+        <SalesBoard prospects={prospects} userEmail={user.email ?? ""} stages={SELECTABLE_STAGES} />
       </div>
     </div>
   );

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { slugify, isValidSlug } from "@/lib/templates/normalize/slug";
 
 export interface SalesProspect {
   id: string;
@@ -20,6 +21,7 @@ export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesP
   const router = useRouter();
   const [mineOnly, setMineOnly] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [convertFor, setConvertFor] = useState<SalesProspect | null>(null);
 
   const visible = mineOnly ? prospects.filter((p) => p.agent_id === userEmail) : prospects;
 
@@ -85,17 +87,138 @@ export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesP
                 </td>
                 <td style={{ ...td, fontSize: 11, color: "#888886", fontFamily: "var(--font-mono)" }}>{p.agent_id || "unassigned"}</td>
                 <td style={td}>
-                  <select value={p.stage} disabled={busyId === p.id} onChange={(e) => setStage(p.id, e.target.value)} style={{ padding: "5px 8px", border: "1.5px solid #d8d6cf", borderRadius: 4, fontSize: 12, fontFamily: "var(--font-mono)", background: "#fff" }}>
-                    {stages.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  {p.stage === "converted" ? (
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "#1a7a3a" }}>converted ✓</span>
+                  ) : (
+                    <select value={stages.includes(p.stage) ? p.stage : ""} disabled={busyId === p.id} onChange={(e) => setStage(p.id, e.target.value)} style={{ padding: "5px 8px", border: "1.5px solid #d8d6cf", borderRadius: 4, fontSize: 12, fontFamily: "var(--font-mono)", background: "#fff" }}>
+                      {!stages.includes(p.stage) && <option value="" disabled>{p.stage}</option>}
+                      {stages.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  )}
                 </td>
-                <td style={{ ...td, textAlign: "right" }}>
+                <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+                  {p.stage === "live" && (
+                    <button onClick={() => setConvertFor(p)} style={convertBtn}>Convert</button>
+                  )}
                   <button onClick={() => logCall(p.id)} style={ghostBtn}>Log call</button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      {convertFor && (
+        <ConvertModal
+          prospect={convertFor}
+          agentEmail={userEmail}
+          onClose={() => setConvertFor(null)}
+          onConverted={() => {
+            setConvertFor(null);
+            router.refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Captures the owner data collected on the conversion call (owner email/name, a
+ * URL-safe Kura slug, optional custom domain) and POSTs it to the convert
+ * endpoint, which fires the signed WR→SL conversion webhook. Slug defaults to a
+ * slugified business name and is validated against SL's contract before submit.
+ */
+function ConvertModal({
+  prospect,
+  agentEmail,
+  onClose,
+  onConverted,
+}: {
+  prospect: SalesProspect;
+  agentEmail: string;
+  onClose: () => void;
+  onConverted: () => void;
+}) {
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+  const [slug, setSlug] = useState(slugify(prospect.business_name ?? ""));
+  const [domain, setDomain] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ownerEmail.trim());
+  const slugOk = isValidSlug(slug.trim());
+  const canSubmit = emailOk && slugOk && !submitting;
+
+  async function submit() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/templates/prospects/${prospect.id}/convert`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          owner_email: ownerEmail.trim(),
+          owner_name: ownerName.trim() || undefined,
+          slug: slug.trim(),
+          domain_name: domain.trim() || undefined,
+        }),
+      });
+      if (res.ok) {
+        onConverted();
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as { error?: string; retryable?: boolean };
+      if (res.status === 409 && data.error === "build_not_ready") {
+        setError("Preview isn't ready yet (build not succeeded). Try again once the preview is live.");
+      } else if (res.status === 404) {
+        setError("SL has no build for this prospect (build_not_found).");
+      } else if (data.retryable) {
+        setError(`Temporary error (${data.error ?? "unknown"}). Safe to retry.`);
+      } else {
+        setError(`Conversion failed: ${data.error ?? `HTTP ${res.status}`}`);
+      }
+    } catch (e) {
+      setError(`Network error: ${e instanceof Error ? e.message : String(e)}. Safe to retry.`);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div role="dialog" aria-modal="true" style={overlay} onClick={onClose}>
+      <div style={modal} onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ fontFamily: "var(--font-serif)", fontSize: "1.25rem", fontWeight: 700, margin: "0 0 4px" }}>
+          Convert {prospect.business_name || "prospect"}
+        </h2>
+        <p style={{ fontSize: 12, color: "#888886", margin: "0 0 16px" }}>
+          Fires the Kura promote. Owner data is collected on the rep call. Agent: {agentEmail}
+        </p>
+
+        <label style={lbl}>Owner email *</label>
+        <input style={inp} type="email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder="owner@business.com" autoFocus />
+
+        <label style={lbl}>Owner name</label>
+        <input style={inp} value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="Jane Doe" />
+
+        <label style={lbl}>Kura slug *</label>
+        <input style={{ ...inp, fontFamily: "var(--font-mono)" }} value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="acme-plumbing" />
+        {!slugOk && slug.trim() !== "" && (
+          <span style={hint}>lowercase letters, numbers, hyphens; 1–60 chars; no leading/trailing hyphen</span>
+        )}
+
+        <label style={lbl}>Custom domain (optional)</label>
+        <input style={inp} value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="acmeplumbing.com" />
+
+        {error && <div style={errBox}>{error}</div>}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
+          <button onClick={onClose} style={ghostBtn} disabled={submitting}>Cancel</button>
+          <button onClick={submit} style={{ ...convertBtn, opacity: canSubmit ? 1 : 0.5, cursor: canSubmit ? "pointer" : "not-allowed" }} disabled={!canSubmit}>
+            {submitting ? "Converting…" : "Convert & promote"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -104,3 +227,10 @@ export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesP
 const th: React.CSSProperties = { padding: "9px 12px", textAlign: "left", fontFamily: "var(--font-mono)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "#555553", fontWeight: 600 };
 const td: React.CSSProperties = { padding: "10px 12px", fontSize: 13, verticalAlign: "middle" };
 const ghostBtn: React.CSSProperties = { fontFamily: "var(--font-sans)", fontSize: 12, fontWeight: 500, color: "#555553", background: "#fff", border: "1.5px solid #d8d6cf", borderRadius: 4, padding: "5px 10px", cursor: "pointer" };
+const convertBtn: React.CSSProperties = { fontFamily: "var(--font-sans)", fontSize: 12, fontWeight: 600, color: "#fff", background: "#1a7a3a", border: "1.5px solid #1a7a3a", borderRadius: 4, padding: "5px 10px", cursor: "pointer", marginRight: 6 };
+const overlay: React.CSSProperties = { position: "fixed", inset: 0, background: "rgba(17,17,16,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 };
+const modal: React.CSSProperties = { background: "#fff", border: "1.5px solid #e8e6df", borderRadius: 8, padding: 24, width: "100%", maxWidth: 420, boxShadow: "0 12px 40px rgba(0,0,0,0.18)" };
+const lbl: React.CSSProperties = { display: "block", fontFamily: "var(--font-mono)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "#555553", fontWeight: 600, margin: "10px 0 4px" };
+const inp: React.CSSProperties = { width: "100%", padding: "8px 10px", border: "1.5px solid #d8d6cf", borderRadius: 4, fontSize: 13, fontFamily: "var(--font-sans)", boxSizing: "border-box" };
+const hint: React.CSSProperties = { display: "block", fontSize: 11, color: "#b04a1a", marginTop: 4 };
+const errBox: React.CSSProperties = { marginTop: 14, padding: "8px 10px", background: "#fdecea", border: "1px solid #f3c0b8", borderRadius: 4, fontSize: 12, color: "#8a2a1a" };

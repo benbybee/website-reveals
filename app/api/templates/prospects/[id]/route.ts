@@ -31,6 +31,16 @@ export async function PATCH(
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
 
+  // `converted` is a special transition: it must capture owner data + fire the
+  // WR→SL conversion webhook, so it goes through POST .../[id]/convert, never the
+  // generic stage dropdown (which would flip the stage without promoting).
+  if (body.stage === "converted") {
+    return NextResponse.json(
+      { error: "use_conversion_endpoint", detail: "POST /api/templates/prospects/{id}/convert" },
+      { status: 409 },
+    );
+  }
+
   const db = tplDb();
   const { data: existing } = await db
     .from("tpl_prospects")

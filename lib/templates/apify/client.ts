@@ -45,6 +45,28 @@ export async function runActor(actorId: string, input: unknown): Promise<ActorRu
   return { items, runId: res.headers.get("x-apify-run-id") };
 }
 
+/**
+ * Fetch the REAL billed cost of a finished Apify run. The run object exposes
+ * `data.usageTotalUsd` — the actual dollars Apify charged for that run (compute
+ * units + dataset writes + proxy, etc.). This is authoritative; the per-unit
+ * estimate in costs.ts is only a fallback for when we have no runId or the
+ * lookup fails. Returns null on any failure so callers degrade to the estimate.
+ */
+export async function fetchRunUsageUsd(runId: string): Promise<number | null> {
+  const token = APIFY_TOKEN();
+  if (!token || !runId) return null;
+  try {
+    const url = `${APIFY_BASE}/actor-runs/${encodeURIComponent(runId)}?token=${encodeURIComponent(token)}`;
+    const res = await fetch(url);
+    if (res.status < 200 || res.status >= 300) return null;
+    const body = (await res.json()) as { data?: { usageTotalUsd?: number } };
+    const usd = body.data?.usageTotalUsd;
+    return typeof usd === "number" && Number.isFinite(usd) ? usd : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface CostInput {
   campaignId: string;
   stage: "discover" | "audit" | "enrich" | "backfill";
@@ -54,10 +76,13 @@ export interface CostInput {
 }
 
 /**
- * Compute USD from units x per-actor rate and append a tpl_cost_events row.
+ * Append a tpl_cost_events row using the REAL billed cost when a runId is
+ * available (queried from Apify), falling back to the per-unit estimate only
+ * when the real lookup is unavailable.
  */
 export async function recordCostFromRun(db: SupabaseClient, input: CostInput): Promise<void> {
-  const usd = estimateUsd(input.actor, input.units);
+  const real = input.runId ? await fetchRunUsageUsd(input.runId) : null;
+  const usd = real ?? estimateUsd(input.actor, input.units);
   const { error } = await db.from("tpl_cost_events").insert({
     campaign_id: input.campaignId,
     stage: input.stage,

@@ -180,6 +180,88 @@ export async function scrapeBusinessSite(url: string): Promise<ScrapeResult> {
   };
 }
 
+export interface BrandDNA {
+  url: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  colors: FirecrawlBranding["colors"];
+  creditsUsed?: number;
+}
+
+/**
+ * Branding-only scrape for the templates pipeline. Unlike scrapeBusinessSite,
+ * this requests ONLY the `branding` format (no json extraction) — we want just
+ * the logo and a single primary color so the SL preview looks like the
+ * prospect's brand. Dropping the json format avoids the 4 LLM extraction
+ * credits per page, so this is the cheapest way to get brand DNA at scale.
+ *
+ * Logo falls back to favicon when no proper logo is detected. Primary color
+ * falls back through accent → link so we still surface *a* brand color when
+ * the LLM doesn't tag one as "primary".
+ */
+export async function scrapeBrandDNA(url: string): Promise<BrandDNA> {
+  const apiKey = (process.env.FIRECRAWL_API_KEY || "").trim();
+  if (!apiKey) {
+    throw new Error("FIRECRAWL_API_KEY not configured");
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(FIRECRAWL_API, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ url, formats: ["branding"], onlyMainContent: false }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("aborted") || msg.includes("AbortError")) {
+      throw new Error(`Firecrawl brand scrape timed out after ${TIMEOUT_MS}ms`);
+    }
+    throw new Error(`Firecrawl brand scrape failed: ${msg}`);
+  }
+  clearTimeout(timeoutId);
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Firecrawl returned HTTP ${res.status}: ${text.slice(0, 300)}`);
+  }
+
+  const body = (await res.json()) as {
+    success?: boolean;
+    data?: { branding?: FirecrawlBranding; metadata?: Record<string, unknown> };
+    error?: string;
+  };
+
+  if (body.success === false) {
+    throw new Error(`Firecrawl returned success=false: ${body.error || "no error message"}`);
+  }
+
+  const branding = body.data?.branding || {};
+  const colors = branding.colors || {};
+  const logoUrl = branding.images?.logo || branding.images?.favicon || undefined;
+  const primaryColor = pickHex(colors.primary) || pickHex(colors.accent) || pickHex(colors.link);
+
+  return {
+    url,
+    logoUrl,
+    primaryColor,
+    colors,
+    creditsUsed: (body.data?.metadata as { creditsUsed?: number })?.creditsUsed,
+  };
+}
+
+function pickHex(v: string | undefined): string | undefined {
+  return typeof v === "string" && v.startsWith("#") ? v : undefined;
+}
+
 /**
  * Cheap heuristic helper for the UI — returns the set of color hex codes
  * the rep should be shown for accept/reject, in palette priority order.

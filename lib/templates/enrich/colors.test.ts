@@ -15,7 +15,7 @@ describe("brandColorsFromPalette", () => {
 
   it("orders neutral_dark darker than neutral_light", () => {
     const c = brandColorsFromPalette(["#0a3d62", "#e58e26", "#1e272e", "#f5f6fa"])!;
-    expect(luminance(c.neutral_dark)).toBeLessThan(luminance(c.neutral_light));
+    expect(luminance(c.neutral_dark!)).toBeLessThan(luminance(c.neutral_light!));
   });
 
   it("picks the most saturated color as primary", () => {

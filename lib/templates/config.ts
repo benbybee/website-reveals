@@ -4,6 +4,18 @@ export function templatesEnabled(): boolean {
 
 export const APIFY_TOKEN = () => process.env.APIFY_TOKEN ?? "";
 
+// Firecrawl powers the brand-DNA enrichment step (logo + primary color from the
+// business website). Empty key = DNA step is skipped (prospect keeps GBP data
+// only). The per-credit USD rate mirrors the account plan and is used only to
+// dollarize the real credit count Firecrawl reports per scrape; the raw credit
+// count is stored as `units` regardless, so cost is always recomputable.
+export const FIRECRAWL_API_KEY = () => (process.env.FIRECRAWL_API_KEY ?? "").trim();
+export const firecrawlEnabled = () => FIRECRAWL_API_KEY().length > 0;
+export const FIRECRAWL_USD_PER_CREDIT = () =>
+  Number(process.env.FIRECRAWL_USD_PER_CREDIT ?? "0.00083") || 0.00083;
+// Fallback credit count when a branding scrape doesn't echo creditsUsed.
+export const FIRECRAWL_CREDITS_PER_SCRAPE = 5;
+
 // Lob direct-mail (postcards). A `test_`-prefixed key hits Lob's test mode (no
 // real mail, no charge); a `live_` key sends real cards. The mail-campaign task
 // and address-verification both read this. Empty = mailing disabled.

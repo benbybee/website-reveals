@@ -35,9 +35,9 @@ export interface PhotoAsset {
 
 export interface BrandColors {
   primary: string;
-  accent: string;
-  neutral_dark: string;
-  neutral_light: string;
+  accent?: string;
+  neutral_dark?: string;
+  neutral_light?: string;
 }
 
 export interface Geo {

@@ -1,4 +1,4 @@
-import type { CanonicalRecord } from "../types";
+import type { BrandColors, CanonicalRecord, LogoAsset } from "../types";
 import { scoreRecord, type ScoreResult } from "../score/gate";
 import { deriveServices } from "./services";
 import { brandColorsFromPalette } from "./colors";
@@ -12,6 +12,10 @@ export interface AssembleInput {
   gbpCategories?: string[];
   /** Candidate logo palette for brand-color derivation. */
   palette?: string[];
+  /** Logo scraped from the business website (Firecrawl brand DNA). */
+  logo?: LogoAsset;
+  /** Brand colors scraped from the business website (Firecrawl brand DNA). */
+  brandColors?: BrandColors;
   /** Controlled-vocabulary industry slug from the campaign config. */
   industrySlug: string;
 }
@@ -39,7 +43,7 @@ function firstNonEmpty<T>(...vals: (T | undefined | null)[]): T | undefined {
  * (the Trigger task drops dead URLs before calling this), so this stays pure.
  */
 export function assembleRecord(input: AssembleInput): AssembleOutput {
-  const { place, facebook = {}, gbpCategories = [], palette = [], industrySlug } = input;
+  const { place, facebook = {}, gbpCategories = [], palette = [], logo, brandColors, industrySlug } = input;
 
   const record: CanonicalRecord = {
     source_id: place.source_id ?? "",
@@ -54,7 +58,7 @@ export function assembleRecord(input: AssembleInput): AssembleOutput {
     hours: firstNonEmpty(place.hours, facebook.hours),
     scraped_at: place.scraped_at,
     email: firstNonEmpty(place.email, facebook.email),
-    logo: firstNonEmpty(place.logo, facebook.logo),
+    logo: firstNonEmpty(logo, place.logo, facebook.logo),
     description: firstNonEmpty(place.description, facebook.description),
     socials: firstNonEmpty(place.socials, facebook.socials),
   };
@@ -70,11 +74,12 @@ export function assembleRecord(input: AssembleInput): AssembleOutput {
   const services = deriveServices(gbpCategories);
   if (services.length) record.services = services;
 
-  const colors = brandColorsFromPalette(palette);
+  const colors = brandColors ?? brandColorsFromPalette(palette);
   if (colors) record.brand_colors = colors;
 
   const sources = new Set<string>([...(place.sources ?? [])]);
   if (facebook.logo || facebook.description || facebook.socials?.facebook) sources.add("facebook");
+  if (logo || brandColors) sources.add("firecrawl");
   record.sources = [...sources];
 
   const score = scoreRecord(record);

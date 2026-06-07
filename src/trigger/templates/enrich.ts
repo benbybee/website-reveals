@@ -6,7 +6,9 @@ import { assembleRecord } from "@/lib/templates/enrich";
 import { mapFacebookToRecord, type FacebookItem } from "@/lib/templates/enrich/facebook";
 import { verifyAssets } from "@/lib/templates/enrich/verifyAssets";
 import { TPL_TASK_IDS } from "@/lib/templates/trigger/ids";
-import type { CanonicalRecord } from "@/lib/templates/types";
+import { scrapeBrandDNA } from "@/lib/firecrawl";
+import { firecrawlEnabled, FIRECRAWL_USD_PER_CREDIT, FIRECRAWL_CREDITS_PER_SCRAPE } from "@/lib/templates/config";
+import type { BrandColors, CanonicalRecord, LogoAsset } from "@/lib/templates/types";
 
 const FB_ACTOR = "apify/facebook-pages-scraper";
 
@@ -55,6 +57,8 @@ export const tplEnrichTask = task({
     let qualified = 0;
     let incomplete = 0;
     let fbRuns = 0;
+    let firecrawlCredits = 0;
+    const dnaEnabled = firecrawlEnabled();
 
     for (const row of rows) {
       try {
@@ -76,11 +80,38 @@ export const tplEnrichTask = task({
           }
         }
 
+        // Brand DNA: scrape the business website (when present) for a logo and a
+        // single primary color so the SL preview looks like the prospect's brand.
+        // Best-effort and additive — failures never disqualify a prospect, and
+        // no-website businesses simply skip this (they're still prime targets).
+        let dnaLogo: LogoAsset | undefined;
+        let dnaColors: BrandColors | undefined;
+        if (dnaEnabled && cleanedPlace.website) {
+          try {
+            const dna = await scrapeBrandDNA(cleanedPlace.website);
+            firecrawlCredits += dna.creditsUsed ?? FIRECRAWL_CREDITS_PER_SCRAPE;
+            if (dna.logoUrl) dnaLogo = { src_url: dna.logoUrl };
+            if (dna.primaryColor) {
+              const c = dna.colors ?? {};
+              dnaColors = {
+                primary: dna.primaryColor,
+                accent: c.accent || c.secondary || undefined,
+                neutral_dark: c.textPrimary || undefined,
+                neutral_light: c.background || undefined,
+              };
+            }
+          } catch (e) {
+            logger.warn("enrich: brand DNA skipped", { source_id: row.source_id, error: String(e) });
+          }
+        }
+
         const gbpCategories = cleanedPlace.industry_raw ? [cleanedPlace.industry_raw] : [];
         const { record, score } = assembleRecord({
           place: cleanedPlace,
           facebook,
           gbpCategories,
+          logo: dnaLogo,
+          brandColors: dnaColors,
           industrySlug: slSlug,
         });
 
@@ -117,6 +148,17 @@ export const tplEnrichTask = task({
         stage: "enrich",
         actor: FB_ACTOR,
         units: fbRuns,
+      });
+    }
+
+    if (firecrawlCredits > 0) {
+      await db.from("tpl_cost_events").insert({
+        campaign_id: payload.campaignId,
+        stage: "enrich",
+        actor: "firecrawl",
+        units: firecrawlCredits,
+        usd: firecrawlCredits * FIRECRAWL_USD_PER_CREDIT(),
+        run_id: null,
       });
     }
 

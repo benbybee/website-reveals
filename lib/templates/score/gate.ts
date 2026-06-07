@@ -13,8 +13,9 @@ export function scoreRecord(r: CanonicalRecord): ScoreResult {
   for (const k of REQUIRED) if (!present((r as unknown as Record<string, unknown>)[k])) missing.push(k);
   const hasAddr = !!r.address && present(r.address.street) && present(r.address.city) && present(r.address.state);
   if (!hasAddr && !missing.includes("address")) missing.push("address");
-  const hasAsset = !!r.logo?.src_url || (r.photos?.length ?? 0) > 0;
-  if (!hasAsset) missing.push("logo_or_photos");
+  // logo_or_photos is NOT a hard requirement: the gate's job is "can we mail a
+  // postcard" (business_name + a real address), and a missing logo/photo never
+  // blocks that. It still lowers the completeness score below as a soft signal.
 
   // identity anchor = name + full address + phone
   let anchor = 0;

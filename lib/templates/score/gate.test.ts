@@ -22,10 +22,20 @@ describe("gate", () => {
     expect(isQualified(s)).toBe(false);
     expect(s.missing).toContain("phone");
   });
-  it("fails with neither logo nor photos", () => {
+  it("still qualifies with neither logo nor photos (mailable without assets)", () => {
     const s = scoreRecord({ ...base, photos: [] });
+    expect(isQualified(s)).toBe(true);
+    expect(s.missing).not.toContain("logo_or_photos");
+  });
+  it("fails without a mailable address", () => {
+    const s = scoreRecord({ ...base, address: { ...base.address, street: "", city: "", state: "" } });
     expect(isQualified(s)).toBe(false);
-    expect(s.missing).toContain("logo_or_photos");
+    expect(s.missing).toContain("address");
+  });
+  it("fails without a business name", () => {
+    const s = scoreRecord({ ...base, business_name: undefined as never });
+    expect(isQualified(s)).toBe(false);
+    expect(s.missing).toContain("business_name");
   });
   it("lowers confidence when identity anchor is weak", () => {
     const weak = scoreRecord({ ...base, address: { ...base.address, street: "" } });

@@ -5,14 +5,25 @@ import { tplDb } from "@/lib/templates/db";
 
 const MAIL_PROVIDERS: MailProvider[] = ["lob", "click2mail", "export"];
 
+interface LocationInput {
+  state: string;
+  city?: string;
+  radius?: number;
+}
+
 interface PatchBody {
   postcard_design_id?: string | null;
   return_address_id?: string | null;
   mail_provider?: string;
+  locations?: LocationInput[];
+  target_count?: number;
+  audit_enabled?: boolean;
 }
 
-// Assign (or clear) the postcard design + return address used when mailing this
-// campaign. Both are soft references; setting null detaches.
+// Edit a campaign (the long-lived list) and/or assign its mail settings. The
+// postcard design + return address are soft references; setting null detaches.
+// Editing locations/target lets the user develop the list — add cities, raise
+// the target — without creating a second campaign for the same (industry, state).
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!templatesEnabled()) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const auth = await requireAdmin();
@@ -49,13 +60,46 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     patch.mail_provider = body.mail_provider;
   }
+  if (body.locations !== undefined) {
+    if (!Array.isArray(body.locations) || body.locations.length === 0) {
+      return NextResponse.json({ error: "at least one location is required" }, { status: 400 });
+    }
+    for (const loc of body.locations) {
+      if (!loc || typeof loc.state !== "string" || !loc.state.trim()) {
+        return NextResponse.json({ error: "each location requires a state" }, { status: 400 });
+      }
+    }
+    const states = [...new Set(body.locations.map((l) => l.state.trim().toUpperCase()))];
+    if (states.length > 1) {
+      return NextResponse.json(
+        { error: "A campaign covers a single state. Create one campaign per state." },
+        { status: 400 },
+      );
+    }
+    patch.locations = body.locations;
+    patch.state = states[0];
+  }
+  if (body.target_count !== undefined) {
+    patch.target_count = Math.max(0, Math.floor(body.target_count));
+  }
+  if (body.audit_enabled !== undefined) {
+    patch.audit_enabled = body.audit_enabled === true;
+  }
 
   const { data, error } = await db
     .from("tpl_campaigns")
     .update(patch)
     .eq("id", id)
-    .select("id, postcard_design_id, return_address_id, mail_provider")
+    .select("id, postcard_design_id, return_address_id, mail_provider, locations, target_count, audit_enabled, state")
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    if (error.code === "23505") {
+      return NextResponse.json(
+        { error: "A campaign for that industry + state already exists." },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
   return NextResponse.json({ ok: true, campaign: data });
 }

@@ -36,6 +36,7 @@ export default async function TemplatesPage() {
     return {
       id,
       industry_slug: c.industry_slug as string,
+      state: (c.state as string) ?? null,
       locations: (c.locations as { state?: string; city?: string }[]) ?? [],
       status: c.status as string,
       target_count: (c.target_count as number) ?? 0,

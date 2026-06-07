@@ -44,11 +44,23 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Single-state model: a campaign is one (industry, state) list. Every location
+  // row must share the same state, which becomes the campaign's canonical scope.
+  const states = [...new Set(body.locations.map((l) => l.state.trim().toUpperCase()))];
+  if (states.length > 1) {
+    return NextResponse.json(
+      { error: "A campaign covers a single state. Create one campaign per state." },
+      { status: 400 },
+    );
+  }
+  const state = states[0];
+
   const db = tplDb();
   const { data, error } = await db
     .from("tpl_campaigns")
     .insert({
       industry_slug: industrySlug,
+      state,
       locations: body.locations,
       target_count: Math.max(0, Math.floor(body.target_count ?? 0)),
       audit_enabled: body.audit_enabled === true,
@@ -59,6 +71,13 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
+    // 23505 = unique violation on (industry_slug, state): this list already exists.
+    if (error.code === "23505") {
+      return NextResponse.json(
+        { error: `A ${industrySlug} campaign for ${state} already exists. Open and re-run it to keep developing the list.` },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   return NextResponse.json({ id: (data as { id: string }).id }, { status: 201 });

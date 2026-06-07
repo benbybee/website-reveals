@@ -9,12 +9,15 @@ import { TPL_TASK_IDS } from "@/lib/templates/trigger/ids";
 import { scrapeBrandDNA } from "@/lib/firecrawl";
 import { firecrawlEnabled, FIRECRAWL_USD_PER_CREDIT, FIRECRAWL_CREDITS_PER_SCRAPE } from "@/lib/templates/config";
 import type { BrandColors, CanonicalRecord, LogoAsset } from "@/lib/templates/types";
+import type { EnrichPayload } from "@/lib/templates/rerun";
 
 const FB_ACTOR = "apify/facebook-pages-scraper";
 
 interface ProspectRow {
   id: string;
   source_id: string;
+  stage: string;
+  website: string | null;
   record: Partial<CanonicalRecord>;
 }
 
@@ -29,8 +32,11 @@ export const tplEnrichTask = task({
   id: TPL_TASK_IDS.enrich,
   maxDuration: 1800,
   queue: { concurrencyLimit: 2 },
-  run: async (payload: { campaignId: string }) => {
+  run: async (payload: EnrichPayload) => {
     const db = tplDb();
+    const stages = payload.stages && payload.stages.length > 0 ? payload.stages : ["scraped"];
+    const includeNoSite = payload.includeNoSite !== false;
+    const preserveStage = payload.preserveStage === true;
 
     const { data: campaign } = await db
       .from("tpl_campaigns")
@@ -47,11 +53,13 @@ export const tplEnrichTask = task({
       .maybeSingle();
     const slSlug = (industry as { sl_slug: string } | null)?.sl_slug ?? industrySlug;
 
-    const { data: prospects } = await db
+    let query = db
       .from("tpl_prospects")
-      .select("id, source_id, record")
+      .select("id, source_id, stage, website, record")
       .eq("campaign_id", payload.campaignId)
-      .eq("stage", "scraped");
+      .in("stage", stages);
+    if (!includeNoSite) query = query.not("website", "is", null);
+    const { data: prospects } = await query;
     const rows = (prospects ?? []) as ProspectRow[];
 
     let qualified = 0;
@@ -62,7 +70,9 @@ export const tplEnrichTask = task({
 
     for (const row of rows) {
       try {
-        await db.from("tpl_prospects").update({ stage: "enriching" }).eq("id", row.id);
+        // Skip the transient "enriching" flip when preserving stage, so a
+        // re-enrich never disturbs a rep's existing pipeline position.
+        if (!preserveStage) await db.from("tpl_prospects").update({ stage: "enriching" }).eq("id", row.id);
 
         // Drop dead asset URLs before scoring so the gate sees only real assets.
         const cleanedPlace = await verifyAssets(row.record as CanonicalRecord);
@@ -115,8 +125,10 @@ export const tplEnrichTask = task({
           industrySlug: slSlug,
         });
 
-        const stage = score.missing.length === 0 ? "qualified" : "incomplete";
-        if (stage === "qualified") qualified += 1;
+        // preserveStage: keep the prospect where it is (rep may have advanced it);
+        // otherwise let the score decide qualified vs incomplete.
+        const stage = preserveStage ? row.stage : score.missing.length === 0 ? "qualified" : "incomplete";
+        if (score.missing.length === 0) qualified += 1;
         else incomplete += 1;
 
         await db
@@ -162,17 +174,32 @@ export const tplEnrichTask = task({
       });
     }
 
+    // Roll up campaign counts from the whole prospect set, not just this run's
+    // subset — a partial re-enrich must not clobber the campaign-wide totals.
+    const countStage = async (stage: string) => {
+      const { count } = await db
+        .from("tpl_prospects")
+        .select("id", { count: "exact", head: true })
+        .eq("campaign_id", payload.campaignId)
+        .eq("stage", stage);
+      return count ?? 0;
+    };
+    const [qualifiedTotal, incompleteTotal] = await Promise.all([
+      countStage("qualified"),
+      countStage("incomplete"),
+    ]);
+
     await db
       .from("tpl_campaigns")
       .update({
-        qualified_count: qualified,
-        incomplete_count: incomplete,
+        qualified_count: qualifiedTotal,
+        incomplete_count: incompleteTotal,
         status: "ready",
         updated_at: new Date().toISOString(),
       })
       .eq("id", payload.campaignId);
 
-    return { qualified, incomplete };
+    return { qualified, incomplete, qualifiedTotal, incompleteTotal };
   },
 });
 

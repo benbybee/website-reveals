@@ -5,10 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { TplIndustry } from "@/lib/templates/industries";
 import { US_STATES } from "@/lib/templates/normalize/state";
+import { RerunModal, type RerunTarget } from "./RerunModal";
 
 export interface CampaignSummary {
   id: string;
   industry_slug: string;
+  state: string | null;
   locations: { state?: string; city?: string }[];
   status: string;
   target_count: number;
@@ -22,52 +24,73 @@ export interface CampaignSummary {
   created_at: string;
 }
 
-interface LocationRow {
-  state: string;
-  city: string;
-}
+const BLANK = { industrySlug: "", state: "", cities: [""], targetCount: 25, auditEnabled: false };
 
 export function CampaignsPanel({ campaigns, industries }: { campaigns: CampaignSummary[]; industries: TplIndustry[] }) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
-  const [industrySlug, setIndustrySlug] = useState("");
-  const [targetCount, setTargetCount] = useState(25);
-  const [auditEnabled, setAuditEnabled] = useState(false);
-  const [locations, setLocations] = useState<LocationRow[]>([{ state: "", city: "" }]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [industrySlug, setIndustrySlug] = useState(BLANK.industrySlug);
+  const [state, setState] = useState(BLANK.state);
+  const [cities, setCities] = useState<string[]>(BLANK.cities);
+  const [targetCount, setTargetCount] = useState(BLANK.targetCount);
+  const [auditEnabled, setAuditEnabled] = useState(BLANK.auditEnabled);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [runningId, setRunningId] = useState<string | null>(null);
+  const [rerunTarget, setRerunTarget] = useState<RerunTarget | null>(null);
 
-  function updateLocation(i: number, patch: Partial<LocationRow>) {
-    setLocations((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  function resetForm() {
+    setEditingId(null);
+    setIndustrySlug(BLANK.industrySlug);
+    setState(BLANK.state);
+    setCities(BLANK.cities);
+    setTargetCount(BLANK.targetCount);
+    setAuditEnabled(BLANK.auditEnabled);
+    setError(null);
   }
 
-  async function createCampaign(e: React.FormEvent) {
+  function openCreate() {
+    resetForm();
+    setShowForm(true);
+  }
+
+  function openEdit(c: CampaignSummary) {
+    const cityList = [...new Set(c.locations.map((l) => (l.city ?? "").trim()).filter(Boolean))];
+    setEditingId(c.id);
+    setIndustrySlug(c.industry_slug);
+    setState(c.state ?? c.locations[0]?.state ?? "");
+    setCities(cityList.length ? cityList : [""]);
+    setTargetCount(c.target_count || 25);
+    setAuditEnabled(c.audit_enabled);
+    setError(null);
+    setShowForm(true);
+  }
+
+  function buildLocations() {
+    const cleanCities = cities.map((c) => c.trim()).filter(Boolean);
+    return cleanCities.length ? cleanCities.map((city) => ({ state, city })) : [{ state }];
+  }
+
+  async function submitForm(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const cleanLocs = locations
-      .map((l) => ({ state: l.state.trim(), city: l.city.trim() || undefined }))
-      .filter((l) => l.state);
     if (!industrySlug.trim()) return setError("Please select an industry.");
-    if (cleanLocs.length === 0) return setError("At least one location with a state is required.");
+    if (!state) return setError("Please select a state.");
 
     setBusy(true);
     try {
-      const res = await fetch("/api/templates/campaigns", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          industry_slug: industrySlug.trim(),
-          locations: cleanLocs,
-          target_count: targetCount,
-          audit_enabled: auditEnabled,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to create campaign");
+      const locations = buildLocations();
+      const url = editingId ? `/api/templates/campaigns/${editingId}` : "/api/templates/campaigns";
+      const method = editingId ? "PATCH" : "POST";
+      const body = editingId
+        ? { locations, target_count: targetCount, audit_enabled: auditEnabled }
+        : { industry_slug: industrySlug.trim(), locations, target_count: targetCount, audit_enabled: auditEnabled };
+      const res = await fetch(url, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Failed to save campaign");
       setShowForm(false);
-      setIndustrySlug("");
-      setLocations([{ state: "", city: "" }]);
+      resetForm();
       router.refresh();
     } catch (err) {
       setError(String(err instanceof Error ? err.message : err));
@@ -92,6 +115,22 @@ export function CampaignsPanel({ campaigns, industries }: { campaigns: CampaignS
     }
   }
 
+  function openRerun(c: CampaignSummary) {
+    const cityCount = new Set(c.locations.map((l) => (l.city ?? "").trim()).filter(Boolean)).size;
+    setRerunTarget({
+      id: c.id,
+      industry_slug: c.industry_slug,
+      state: c.state,
+      target_count: c.target_count,
+      scraped_count: c.scraped_count,
+      cityCount,
+    });
+  }
+
+  // A campaign that has produced prospects gets "Re-run" (full control); one that
+  // hasn't yet gets a plain first "Run".
+  const hasRun = (c: CampaignSummary) => c.scraped_count > 0;
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
@@ -108,18 +147,23 @@ export function CampaignsPanel({ campaigns, industries }: { campaigns: CampaignS
             Template Sites
           </h1>
           <p style={{ fontSize: 14, color: "#555553" }}>
-            Scrape businesses by industry, enrich into SiteLaunchr-ready records, and push qualified prospects.
+            One campaign per industry + state. Develop each list by re-running to add, enrich, or refresh prospects.
           </p>
         </div>
-        <button onClick={() => setShowForm((v) => !v)} style={primaryBtn}>
+        <button onClick={() => (showForm ? (setShowForm(false), resetForm()) : openCreate())} style={primaryBtn}>
           {showForm ? "Cancel" : "+ New campaign"}
         </button>
       </div>
 
       {showForm && (
-        <form onSubmit={createCampaign} style={card}>
+        <form onSubmit={submitForm} style={card}>
           {error && <div style={errorBox}>{error}</div>}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: 16, marginBottom: 16 }}>
+          {editingId && (
+            <div style={{ fontSize: 12, color: "#888886", marginBottom: 12, fontFamily: "var(--font-mono)" }}>
+              Editing {industrySlug} · {state} — industry &amp; state are fixed once created.
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 120px", gap: 16, marginBottom: 16 }}>
             <label style={fieldLabel}>
               Industry
               {industries.length === 0 ? (
@@ -127,13 +171,20 @@ export function CampaignsPanel({ campaigns, industries }: { campaigns: CampaignS
                   No industries yet — <Link href="/admin/templates/industries" style={{ color: "#ff3d00" }}>add one</Link> first.
                 </span>
               ) : (
-                <select value={industrySlug} onChange={(e) => setIndustrySlug(e.target.value)} style={input}>
+                <select value={industrySlug} onChange={(e) => setIndustrySlug(e.target.value)} style={input} disabled={!!editingId}>
                   <option value="">Select an industry…</option>
                   {industries.map((ind) => (
                     <option key={ind.slug} value={ind.slug}>{ind.display_name}</option>
                   ))}
                 </select>
               )}
+            </label>
+            <label style={fieldLabel}>
+              State
+              <select value={state} onChange={(e) => setState(e.target.value)} style={input} disabled={!!editingId}>
+                <option value="">State…</option>
+                {US_STATES.map((s) => <option key={s.abbr} value={s.abbr}>{s.name} ({s.abbr})</option>)}
+              </select>
             </label>
             <label style={fieldLabel}>
               Target / search
@@ -147,25 +198,28 @@ export function CampaignsPanel({ campaigns, industries }: { campaigns: CampaignS
             </label>
           </div>
 
-          <div style={{ marginBottom: 8, ...fieldLabel }}>Locations</div>
-          {locations.map((loc, i) => (
-            <div key={i} style={{ display: "grid", gridTemplateColumns: "100px 1fr 32px", gap: 10, marginBottom: 8 }}>
-              <select value={loc.state} onChange={(e) => updateLocation(i, { state: e.target.value })} style={input}>
-                <option value="">State…</option>
-                {US_STATES.map((s) => <option key={s.abbr} value={s.abbr}>{s.name} ({s.abbr})</option>)}
-              </select>
-              <input value={loc.city} onChange={(e) => updateLocation(i, { city: e.target.value })} placeholder="City (optional)" style={input} />
-              <button type="button" onClick={() => setLocations((p) => p.filter((_, idx) => idx !== i))} style={iconBtn} disabled={locations.length === 1}>×</button>
+          <div style={{ marginBottom: 8, ...fieldLabel }}>Cities (optional — leave blank to crawl the whole state)</div>
+          {cities.map((city, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 32px", gap: 10, marginBottom: 8 }}>
+              <input
+                value={city}
+                onChange={(e) => setCities((p) => p.map((c, idx) => (idx === i ? e.target.value : c)))}
+                placeholder="City"
+                style={input}
+              />
+              <button type="button" onClick={() => setCities((p) => p.filter((_, idx) => idx !== i))} style={iconBtn} disabled={cities.length === 1}>×</button>
             </div>
           ))}
-          <button type="button" onClick={() => setLocations((p) => [...p, { state: "", city: "" }])} style={ghostBtn}>+ Add location</button>
+          <button type="button" onClick={() => setCities((p) => [...p, ""])} style={ghostBtn}>+ Add city</button>
 
           <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "16px 0", fontSize: 13, color: "#555553" }}>
             <input type="checkbox" checked={auditEnabled} onChange={(e) => setAuditEnabled(e.target.checked)} />
             Enable deep audit (tech-stack + Lighthouse) by default
           </label>
 
-          <button type="submit" disabled={busy} style={primaryBtn}>{busy ? "Creating…" : "Create campaign"}</button>
+          <button type="submit" disabled={busy} style={primaryBtn}>
+            {busy ? "Saving…" : editingId ? "Save changes" : "Create campaign"}
+          </button>
         </form>
       )}
 
@@ -179,7 +233,7 @@ export function CampaignsPanel({ campaigns, industries }: { campaigns: CampaignS
               <th style={{ ...th, textAlign: "center" }}>Qualified</th>
               <th style={{ ...th, textAlign: "center" }}>Incomplete</th>
               <th style={{ ...th, textAlign: "right" }}>Cost</th>
-              <th style={{ ...th, width: 160 }} />
+              <th style={{ ...th, width: 220 }} />
             </tr>
           </thead>
           <tbody>
@@ -189,9 +243,9 @@ export function CampaignsPanel({ campaigns, industries }: { campaigns: CampaignS
             {campaigns.map((c) => (
               <tr key={c.id} style={{ borderTop: "1px solid #f0eeea" }}>
                 <td style={td}>
-                  <div style={{ fontWeight: 600, color: "#111110" }}>{c.industry_slug}</div>
+                  <div style={{ fontWeight: 600, color: "#111110" }}>{c.industry_slug} · {c.state ?? "—"}</div>
                   <div style={{ fontSize: 11, color: "#888886", fontFamily: "var(--font-mono)" }}>
-                    {c.locations.map((l) => (l.city ? `${l.city}, ${l.state}` : l.state)).join(" · ") || "—"}
+                    {c.locations.map((l) => l.city).filter(Boolean).join(" · ") || "whole state"}
                   </div>
                 </td>
                 <td style={{ ...td, textAlign: "center" }}><StatusBadge status={c.status} /></td>
@@ -204,9 +258,14 @@ export function CampaignsPanel({ campaigns, industries }: { campaigns: CampaignS
                 </td>
                 <td style={{ ...td, textAlign: "right" }}>
                   <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                    <button onClick={() => runCampaign(c.id)} disabled={runningId === c.id} style={ghostBtn}>
-                      {runningId === c.id ? "…" : "Run"}
-                    </button>
+                    <button onClick={() => openEdit(c)} style={ghostBtn}>Edit</button>
+                    {hasRun(c) ? (
+                      <button onClick={() => openRerun(c)} style={ghostBtn}>Re-run</button>
+                    ) : (
+                      <button onClick={() => runCampaign(c.id)} disabled={runningId === c.id} style={ghostBtn}>
+                        {runningId === c.id ? "…" : "Run"}
+                      </button>
+                    )}
                     <Link href={`/admin/templates/campaigns/${c.id}`} style={manageLink}>Open →</Link>
                   </div>
                 </td>
@@ -215,6 +274,21 @@ export function CampaignsPanel({ campaigns, industries }: { campaigns: CampaignS
           </tbody>
         </table>
       </div>
+
+      {rerunTarget && (
+        <RerunModal
+          target={rerunTarget}
+          onClose={() => {
+            setRerunTarget(null);
+            router.refresh();
+          }}
+          onEditCities={() => {
+            const c = campaigns.find((x) => x.id === rerunTarget.id);
+            setRerunTarget(null);
+            if (c) openEdit(c);
+          }}
+        />
+      )}
     </div>
   );
 }

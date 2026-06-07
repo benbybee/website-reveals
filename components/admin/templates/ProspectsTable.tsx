@@ -260,7 +260,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
               <th style={th}>Location</th>
               <th style={{ ...th, textAlign: "center" }}>Site</th>
               <th style={{ ...th, textAlign: "center" }}>Complete</th>
-              <th style={{ ...th, textAlign: "center" }}>Conf.</th>
+              <th style={{ ...th, textAlign: "center" }}>DNA</th>
               <th style={{ ...th, textAlign: "center" }}>Mail</th>
               <th style={{ ...th, textAlign: "center" }}>Stage</th>
             </tr>
@@ -282,7 +282,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
                   <td style={{ ...td, color: "#555553" }}>{[p.city, p.state].filter(Boolean).join(", ") || "—"}</td>
                   <td style={{ ...td, textAlign: "center" }}><SiteBadge status={p.website_status} /></td>
                   <td style={{ ...td, textAlign: "center" }}><CompletenessBadge missing={missing} /></td>
-                  <td style={{ ...td, textAlign: "center", fontFamily: "var(--font-mono)" }}>{p.confidence != null ? p.confidence.toFixed(2) : "—"}</td>
+                  <td style={{ ...td, textAlign: "center" }}><DnaBadge record={p.record} stage={p.stage} websiteStatus={p.website_status} /></td>
                   <td style={{ ...td, textAlign: "center" }}><MailBadge mailing={p.tpl_mailings?.[0]} /></td>
                   <td style={{ ...td, textAlign: "center" }}><span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#555553" }}>{p.stage}</span></td>
                 </tr>
@@ -367,6 +367,43 @@ function MailBadge({ mailing }: { mailing?: { status: string; scan_count: number
 function CompletenessBadge({ missing }: { missing: string[] }) {
   if (missing.length === 0) return <span style={{ color: "#0a7a3d", fontSize: 14 }}>✓</span>;
   return <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#b3300a", fontWeight: 600 }} title={missing.join(", ")}>−{missing.length}</span>;
+}
+
+// Brand-DNA progress: "L" lights green when a logo is extracted, "C" when a
+// primary color is. DNA only runs for prospects with a website, so no-site
+// rows show "—"; rows still in the pipeline show "…" until enrich finishes.
+function DnaBadge({ record, stage, websiteStatus }: { record: CanonicalRecord; stage: string; websiteStatus: string }) {
+  if (websiteStatus === "none") {
+    return <span style={{ color: "#c9c7c0", fontSize: 12 }} title="No website — DNA not applicable">—</span>;
+  }
+  if (stage === "scraped" || stage === "enriching") {
+    return <span style={{ color: "#888886", fontSize: 12 }} title="DNA extraction pending">…</span>;
+  }
+  const hasLogo = !!record.logo?.src_url;
+  const hasColor = !!record.brand_colors?.primary;
+  return (
+    <span style={{ display: "inline-flex", gap: 4, justifyContent: "center" }}>
+      <DnaChip label="L" on={hasLogo} title={hasLogo ? "Logo extracted" : "No logo found"} />
+      <DnaChip label="C" on={hasColor} title={hasColor ? "Primary color extracted" : "No color found"} />
+    </span>
+  );
+}
+
+function DnaChip({ label, on, title }: { label: string; on: boolean; title: string }) {
+  return (
+    <span
+      title={title}
+      style={{
+        display: "inline-block", width: 16, height: 16, lineHeight: "16px", textAlign: "center",
+        borderRadius: 3, fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
+        color: on ? "#fff" : "#c9c7c0",
+        background: on ? "#0a7a3d" : "transparent",
+        border: on ? "none" : "1.5px solid #e8e6df",
+      }}
+    >
+      {label}
+    </span>
+  );
 }
 
 const th: React.CSSProperties = { padding: "9px 12px", textAlign: "left", fontFamily: "var(--font-mono)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "#555553", fontWeight: 600 };

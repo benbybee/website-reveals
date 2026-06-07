@@ -94,7 +94,10 @@ export function CampaignsPanel({ campaigns }: { campaigns: CampaignSummary[] }) 
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
         <Link href="/admin" style={{ fontSize: 13, color: "#888886", textDecoration: "none" }}>← Dashboard</Link>
-        <Link href="/admin/templates/sales" style={navBtn}>Sales board →</Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/admin/templates/mail" style={navBtn}>Mail settings</Link>
+          <Link href="/admin/templates/sales" style={navBtn}>Sales board →</Link>
+        </div>
       </div>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 22 }}>
         <div>

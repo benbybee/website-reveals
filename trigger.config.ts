@@ -11,6 +11,10 @@ const SYNCED_ENV_VARS = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
   "APIFY_TOKEN",
+  "LOB_API_KEY",
+  "LOB_UNIT_USD_4X6",
+  "LOB_UNIT_USD_6X9",
+  "LOB_UNIT_USD_6X11",
 ] as const;
 
 export default defineConfig({

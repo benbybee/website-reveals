@@ -152,6 +152,36 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
     }
   }
 
+  async function bulkMail(flags: { mail_ready?: boolean; do_not_mail?: boolean }) {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    setActionBusy(true);
+    try {
+      const res = await fetch(`/api/templates/prospects/bulk`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids, ...flags }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Bulk update failed");
+      setSelected(new Set());
+      load();
+    } catch (e) {
+      alert(String(e instanceof Error ? e.message : e));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  function exportCsv() {
+    const sp = new URLSearchParams();
+    if (stageFilter) sp.set("stage", stageFilter);
+    if (websiteFilter) sp.set("website_status", websiteFilter);
+    if (missingFilter) sp.set("missing", missingFilter);
+    const qs = sp.toString();
+    window.open(`/api/templates/campaigns/${campaign.id}/export${qs ? `?${qs}` : ""}`, "_blank");
+  }
+
   async function pushCampaign() {
     const dryRes = await fetch(`/api/templates/campaigns/${campaign.id}/push`, {
       method: "POST",
@@ -186,7 +216,10 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
       <Link href="/admin/templates" style={{ fontSize: 13, color: "#888886", textDecoration: "none" }}>← Template Sites</Link>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "6px 0 18px" }}>
         <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "1.75rem", fontWeight: 700 }}>{campaign.industry_slug}</h1>
-        <button onClick={pushCampaign} disabled={actionBusy} style={primaryBtn}>Push qualified → SL</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={exportCsv} style={ghostBtn}>Export CSV</button>
+          <button onClick={pushCampaign} disabled={actionBusy} style={primaryBtn}>Push qualified → SL</button>
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 24, marginBottom: 18, flexWrap: "wrap" }}>
@@ -211,6 +244,8 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
           <button onClick={() => estimateAndRun("backfill")} disabled={actionBusy} style={ghostBtn}>Backfill</button>
           <button onClick={assignAgent} disabled={actionBusy} style={ghostBtn}>Assign agent</button>
           <button onClick={approveForSL} disabled={actionBusy} style={ghostBtn}>Approve for SL</button>
+          <button onClick={() => bulkMail({ mail_ready: true })} disabled={actionBusy} style={ghostBtn}>Mark mail-ready</button>
+          <button onClick={() => bulkMail({ do_not_mail: true })} disabled={actionBusy} style={ghostBtn}>Suppress</button>
           <button onClick={() => setSelected(new Set())} style={{ ...ghostBtn, marginLeft: "auto" }}>Clear</button>
         </div>
       )}

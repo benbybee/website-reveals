@@ -6,6 +6,7 @@ export const TPL_TASK_IDS = {
   enrich: "tpl-enrich",
   deepAudit: "tpl-deep-audit",
   backfill: "tpl-backfill",
+  mailCampaign: "tpl-mail-campaign",
 } as const;
 
 // Apify actor IDs each enrichment stage spends against — used for cost estimates.

@@ -4,6 +4,7 @@ import { templatesEnabled } from "@/lib/templates/config";
 import { tplDb } from "@/lib/templates/db";
 import { campaignCost } from "@/lib/templates/cost/rollup";
 import { ProspectsTable, type CampaignHeader } from "@/components/admin/templates/ProspectsTable";
+import { CampaignMailPanel } from "@/components/admin/templates/CampaignMailPanel";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Campaign — Template Sites" };
@@ -38,6 +39,11 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
     <div style={{ minHeight: "100vh", background: "#faf9f5", padding: "32px 24px 80px" }}>
       <div style={{ maxWidth: 1280, margin: "0 auto" }}>
         <ProspectsTable campaign={header} />
+        <CampaignMailPanel
+          campaignId={id}
+          initialDesignId={(c.postcard_design_id as string) ?? null}
+          initialAddressId={(c.return_address_id as string) ?? null}
+        />
       </div>
     </div>
   );

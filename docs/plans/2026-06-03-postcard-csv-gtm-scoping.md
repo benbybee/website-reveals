@@ -111,20 +111,26 @@ LLM fill. Worth a per-campaign spend confirmation gate in the UI before a mass s
 
 ---
 
-## 5. Open questions for Ben (`@OPERATOR`)
+## 5. Operator decisions — RESOLVED 2026-06-06 (`@OPERATOR` Ben)
 
-1. **Eligibility gate:** mail every `live` prospect automatically, or only after a rep/agent
-   marks a prospect "ready to mail"? (Recommend a manual per-campaign trigger with a cost
-   confirm — avoids accidentally mailing 3,500 cards.)
-2. **Postcard design:** do you have a front/back design, or should we draft one? Lob needs
-   an HTML/PDF template with merge fields.
-3. **QR tracking:** build the per-lead tracked short-URL (scan attribution) in v1, or just
-   QR straight to `preview_url` and add tracking later?
-4. **Return address + sender identity** for the `from` field (WR business address).
-5. **Re-mail policy:** if a prospect's preview is rebuilt, do we ever mail a second card, or
-   strictly one card per prospect ever?
-6. **CSV first, or both at once?** Recommend shipping Phase A (CSV) immediately and doing
-   Phase B (Lob) as the larger follow-on.
+1. **Eligibility gate = manual per-campaign trigger.** Operator reviews/approves a campaign
+   before any cards go out. **BUT** the UI must support **bulk-marking** prospects (bulk-select
+   → "ready to mail" / mark-for-mailing), not one-at-a-time.
+2. **Postcard design = upload per campaign.** Build a **design-management UI**: operator uploads
+   front/back postcard designs, names them, and **assigns a design to a campaign**. (New
+   `tpl_postcard_designs` table + blob storage for the uploaded files; campaign gets a
+   `postcard_design_id`.)
+3. **QR tracking = do NOT over-build.** Lob already tracks scan/delivery data. QR points straight
+   to the preview URL; rely on Lob's own tracking. **If** we can later import Lob's tracking data
+   into WR, do that as a follow-on — but no custom per-lead short-URL/scan-attribution subsystem
+   in v1.
+4. **Return address = per-campaign dropdown.** Add a **saved return-address book**
+   (`tpl_return_addresses`) so the operator selects a sender identity from a **dropdown** per
+   campaign instead of re-typing it. Campaign gets a `return_address_id`.
+5. **Re-mail policy = ONE card per prospect, ever.** Hard idempotency — unique constraint on
+   `tpl_mailings(prospect_id)`. A rebuilt preview never triggers a second card.
+6. **Build BOTH** — CSV export (Phase A) and the Lob subsystem (Phase B). Phase A still ships
+   first as the foundation/quick win, but both are in scope for the end-to-end flow.
 
 ---
 

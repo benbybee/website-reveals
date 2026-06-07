@@ -3,6 +3,13 @@ export function templatesEnabled(): boolean {
 }
 
 export const APIFY_TOKEN = () => process.env.APIFY_TOKEN ?? "";
+
+// Lob direct-mail (postcards). A `test_`-prefixed key hits Lob's test mode (no
+// real mail, no charge); a `live_` key sends real cards. The mail-campaign task
+// and address-verification both read this. Empty = mailing disabled.
+export const LOB_API_KEY = () => (process.env.LOB_API_KEY ?? "").trim();
+export const lobEnabled = () => LOB_API_KEY().length > 0;
+export const lobIsTestMode = () => LOB_API_KEY().startsWith("test_");
 export const SL_TEMPLATE_TRANSPORT = () =>
   (process.env.SL_TEMPLATE_TRANSPORT ?? "post") as "post" | "table";
 

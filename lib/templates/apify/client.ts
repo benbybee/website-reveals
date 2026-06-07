@@ -10,39 +10,59 @@ export interface ActorRunResult {
 }
 
 /**
- * Thin wrapper over Apify's run-sync-get-dataset-items REST endpoint. Runs an
- * actor synchronously and returns the produced dataset items. Actor ids use the
- * `owner/name` form here and are converted to Apify's `owner~name` URL form.
+ * Run an Apify actor synchronously and return both its dataset items and the
+ * run id. We use `run-sync` (not `run-sync-get-dataset-items`) precisely because
+ * the latter returns ONLY the items array — no run id — so we'd have no way to
+ * look up the real billed cost. `run-sync` returns the full run object (id,
+ * defaultDatasetId, usageTotalUsd), and we then fetch the items from that
+ * dataset. Two calls, but it gives us an authoritative run id with no reliance
+ * on an undocumented header and no "last run" race under concurrent locations.
  *
- * NOTE: the exact run-stats shape is confirmed during the fixture-capture spike
- * (Task 3.2). Cost is modeled per-result via costs.ts until then.
+ * Actor ids use the `owner/name` form here, converted to Apify's `owner~name`.
  */
 export async function runActor(actorId: string, input: unknown): Promise<ActorRunResult> {
   const token = APIFY_TOKEN();
   if (!token) throw new Error("APIFY_TOKEN is not configured");
   const actorPath = actorId.replace("/", "~");
-  const url = `${APIFY_BASE}/acts/${actorPath}/run-sync-get-dataset-items?token=${encodeURIComponent(token)}`;
+  const runUrl = `${APIFY_BASE}/acts/${actorPath}/run-sync?token=${encodeURIComponent(token)}`;
 
-  const res = await fetch(url, {
+  const runRes = await fetch(runUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
   });
 
-  const text = await res.text();
-  if (res.status < 200 || res.status >= 300) {
-    throw new Error(`Apify actor ${actorId} failed: ${res.status} ${text.slice(0, 300)}`);
+  const runText = await runRes.text();
+  if (runRes.status < 200 || runRes.status >= 300) {
+    throw new Error(`Apify actor ${actorId} failed: ${runRes.status} ${runText.slice(0, 300)}`);
   }
 
-  let items: unknown[] = [];
+  let run: { id?: string; defaultDatasetId?: string };
   try {
-    const parsed = text ? JSON.parse(text) : [];
-    items = Array.isArray(parsed) ? parsed : [];
+    const parsed = runText ? JSON.parse(runText) : {};
+    run = (parsed as { data?: typeof run }).data ?? {};
   } catch {
-    throw new Error(`Apify actor ${actorId} returned non-JSON body`);
+    throw new Error(`Apify actor ${actorId} returned non-JSON run body`);
   }
 
-  return { items, runId: res.headers.get("x-apify-run-id") };
+  const datasetId = run.defaultDatasetId;
+  let items: unknown[] = [];
+  if (datasetId) {
+    const itemsUrl = `${APIFY_BASE}/datasets/${datasetId}/items?token=${encodeURIComponent(token)}&format=json`;
+    const itemsRes = await fetch(itemsUrl);
+    if (itemsRes.status < 200 || itemsRes.status >= 300) {
+      const t = await itemsRes.text().catch(() => "");
+      throw new Error(`Apify dataset ${datasetId} fetch failed: ${itemsRes.status} ${t.slice(0, 200)}`);
+    }
+    try {
+      const parsed = await itemsRes.json();
+      items = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      throw new Error(`Apify dataset ${datasetId} returned non-JSON body`);
+    }
+  }
+
+  return { items, runId: run.id ?? null };
 }
 
 /**

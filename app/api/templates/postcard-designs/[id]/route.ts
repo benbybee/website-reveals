@@ -2,11 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
 import { templatesEnabled } from "@/lib/templates/config";
 import { tplDb } from "@/lib/templates/db";
-import { uploadPostcardAsset } from "@/lib/templates/mail/storage";
 
 const SIZES = new Set(["4x6", "6x9", "6x11"]);
 
-// Multipart PATCH: optionally update name/size and replace front/back artwork.
+interface PatchBody {
+  name?: string;
+  size?: string;
+  front_url?: string | null;
+  back_url?: string | null;
+}
+
+// JSON PATCH: update name/size and/or replace front/back artwork URLs. Artwork
+// bytes are uploaded browser->Supabase via the signed-upload endpoint; only the
+// resulting public URLs are sent here.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!templatesEnabled()) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const auth = await requireAdmin();
@@ -16,40 +24,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const db = tplDb();
   const { data: existing } = await db
     .from("tpl_postcard_designs")
-    .select("name")
+    .select("id")
     .eq("id", id)
     .maybeSingle();
   if (!existing) return NextResponse.json({ error: "design_not_found" }, { status: 404 });
 
-  let form: FormData;
+  let body: PatchBody;
   try {
-    form = await req.formData();
+    body = (await req.json()) as PatchBody;
   } catch {
-    return NextResponse.json({ error: "expected_multipart_form" }, { status: 400 });
+    return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  const name = form.get("name");
-  if (typeof name === "string" && name.trim()) patch.name = name.trim();
-  const size = form.get("size");
-  if (typeof size === "string" && size.trim()) {
-    if (!SIZES.has(size.trim())) return NextResponse.json({ error: "invalid_size" }, { status: 400 });
-    patch.size = size.trim();
+  if (typeof body.name === "string" && body.name.trim()) patch.name = body.name.trim();
+  if (typeof body.size === "string" && body.size.trim()) {
+    if (!SIZES.has(body.size.trim())) return NextResponse.json({ error: "invalid_size" }, { status: 400 });
+    patch.size = body.size.trim();
   }
-
-  const designName = (patch.name as string) ?? (existing.name as string);
-  try {
-    const front = form.get("front");
-    if (front instanceof File && front.size > 0) {
-      patch.front_url = (await uploadPostcardAsset(db, front, { designName, side: "front" })).publicUrl;
-    }
-    const back = form.get("back");
-    if (back instanceof File && back.size > 0) {
-      patch.back_url = (await uploadPostcardAsset(db, back, { designName, side: "back" })).publicUrl;
-    }
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "upload_failed" }, { status: 400 });
-  }
+  if (body.front_url !== undefined) patch.front_url = body.front_url;
+  if (body.back_url !== undefined) patch.back_url = body.back_url;
 
   const { data, error } = await db
     .from("tpl_postcard_designs")

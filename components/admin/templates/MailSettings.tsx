@@ -3,9 +3,30 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { createBrowserClient } from "@/lib/supabase/client";
 import type { PostcardDesign, ReturnAddress, PostcardSize } from "@/lib/templates/mail/types";
 
 const SIZES: PostcardSize[] = ["4x6", "6x9", "6x11"];
+const POSTCARD_BUCKET = "tpl-postcards";
+
+// Upload artwork browser->Supabase directly via a signed URL so large
+// print-resolution files never hit the serverless function's body cap.
+async function uploadArtwork(designName: string, side: "front" | "back", file: File): Promise<string> {
+  const signRes = await fetch("/api/templates/postcard-designs/sign-upload", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ designName, side, contentType: file.type }),
+  });
+  const sign = await signRes.json();
+  if (!signRes.ok) throw new Error(sign.error || "Could not sign upload");
+
+  const supa = createBrowserClient();
+  const { error } = await supa.storage
+    .from(POSTCARD_BUCKET)
+    .uploadToSignedUrl(sign.path, sign.token, file, { contentType: file.type, upsert: true });
+  if (error) throw new Error(`Storage upload failed: ${error.message}`);
+  return sign.publicUrl as string;
+}
 
 export function MailSettings({
   initialDesigns,
@@ -61,17 +82,19 @@ function DesignsSection({ initialDesigns }: { initialDesigns: PostcardDesign[] }
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!name.trim()) return setError("Name is required.");
-    const fd = new FormData();
-    fd.set("name", name.trim());
-    fd.set("size", size);
-    if (front) fd.set("front", front);
-    if (back) fd.set("back", back);
+    const designName = name.trim();
+    if (!designName) return setError("Name is required.");
     setBusy(true);
     try {
-      const res = await fetch("/api/templates/postcard-designs", { method: "POST", body: fd });
+      const front_url = front ? await uploadArtwork(designName, "front", front) : null;
+      const back_url = back ? await uploadArtwork(designName, "back", back) : null;
+      const res = await fetch("/api/templates/postcard-designs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: designName, size, front_url, back_url }),
+      });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Upload failed");
+      if (!res.ok) throw new Error(json.error || "Save failed");
       setDesigns((d) => [json.design as PostcardDesign, ...d]);
       setName(""); setFront(null); setBack(null); setShowForm(false);
       router.refresh();

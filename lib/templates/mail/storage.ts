@@ -1,34 +1,36 @@
-// Upload postcard artwork to the public `tpl-postcards` Supabase Storage bucket
-// and return a public URL Lob can fetch. Service-role client only (admin surface).
+// Postcard artwork lives in the public `tpl-postcards` Supabase Storage bucket.
+// Files are uploaded browser->Supabase directly via a signed upload URL minted
+// here (service-role), so print-resolution artwork never passes through the
+// serverless function (Vercel caps function request bodies at ~4.5 MB).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const BUCKET = "tpl-postcards";
+export const POSTCARD_BUCKET = "tpl-postcards";
 const ALLOWED = new Set(["image/png", "image/jpeg", "application/pdf"]);
 
-export interface UploadResult {
+export interface SignedUpload {
   path: string;
+  token: string;
   publicUrl: string;
 }
 
-export async function uploadPostcardAsset(
+function extFor(contentType: string): string {
+  return contentType === "application/pdf" ? "pdf" : contentType === "image/jpeg" ? "jpg" : "png";
+}
+
+export async function signPostcardUpload(
   db: SupabaseClient,
-  file: File,
-  opts: { designName: string; side: "front" | "back" },
-): Promise<UploadResult> {
-  if (!ALLOWED.has(file.type)) {
-    throw new Error(`unsupported_type:${file.type} (allowed: PNG, JPEG, PDF)`);
+  opts: { designName: string; side: "front" | "back"; contentType: string },
+): Promise<SignedUpload> {
+  if (!ALLOWED.has(opts.contentType)) {
+    throw new Error(`unsupported_type:${opts.contentType} (allowed: PNG, JPEG, PDF)`);
   }
-  const ext = file.type === "application/pdf" ? "pdf" : file.type === "image/jpeg" ? "jpg" : "png";
   const safeName = opts.designName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "design";
-  const path = `${safeName}/${opts.side}-${Date.now()}.${ext}`;
+  const path = `${safeName}/${opts.side}-${Date.now()}.${extFor(opts.contentType)}`;
 
-  const bytes = await file.arrayBuffer();
-  const { error } = await db.storage
-    .from(BUCKET)
-    .upload(path, bytes, { contentType: file.type, upsert: true });
-  if (error) throw new Error(`upload_failed: ${error.message}`);
+  const { data, error } = await db.storage.from(POSTCARD_BUCKET).createSignedUploadUrl(path, { upsert: true });
+  if (error || !data) throw new Error(`sign_failed: ${error?.message ?? "unknown"}`);
 
-  const { data } = db.storage.from(BUCKET).getPublicUrl(path);
-  return { path, publicUrl: data.publicUrl };
+  const { data: pub } = db.storage.from(POSTCARD_BUCKET).getPublicUrl(path);
+  return { path, token: data.token, publicUrl: pub.publicUrl };
 }

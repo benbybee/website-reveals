@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import type { TplIndustry } from "@/lib/templates/industries";
 
 export interface CampaignSummary {
   id: string;
@@ -25,7 +26,7 @@ interface LocationRow {
   city: string;
 }
 
-export function CampaignsPanel({ campaigns }: { campaigns: CampaignSummary[] }) {
+export function CampaignsPanel({ campaigns, industries }: { campaigns: CampaignSummary[]; industries: TplIndustry[] }) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
   const [industrySlug, setIndustrySlug] = useState("");
@@ -46,7 +47,7 @@ export function CampaignsPanel({ campaigns }: { campaigns: CampaignSummary[] }) 
     const cleanLocs = locations
       .map((l) => ({ state: l.state.trim(), city: l.city.trim() || undefined }))
       .filter((l) => l.state);
-    if (!industrySlug.trim()) return setError("Industry slug is required.");
+    if (!industrySlug.trim()) return setError("Please select an industry.");
     if (cleanLocs.length === 0) return setError("At least one location with a state is required.");
 
     setBusy(true);
@@ -95,6 +96,7 @@ export function CampaignsPanel({ campaigns }: { campaigns: CampaignSummary[] }) 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
         <Link href="/admin" style={{ fontSize: 13, color: "#888886", textDecoration: "none" }}>← Dashboard</Link>
         <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/admin/templates/industries" style={navBtn}>Industries</Link>
           <Link href="/admin/templates/mail" style={navBtn}>Mail settings</Link>
           <Link href="/admin/templates/sales" style={navBtn}>Sales board →</Link>
         </div>
@@ -118,13 +120,19 @@ export function CampaignsPanel({ campaigns }: { campaigns: CampaignSummary[] }) 
           {error && <div style={errorBox}>{error}</div>}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: 16, marginBottom: 16 }}>
             <label style={fieldLabel}>
-              Industry slug
-              <input
-                value={industrySlug}
-                onChange={(e) => setIndustrySlug(e.target.value)}
-                placeholder="pest-control"
-                style={input}
-              />
+              Industry
+              {industries.length === 0 ? (
+                <span style={{ ...input, display: "block", color: "#b3300a", fontFamily: "var(--font-sans)" }}>
+                  No industries yet — <Link href="/admin/templates/industries" style={{ color: "#ff3d00" }}>add one</Link> first.
+                </span>
+              ) : (
+                <select value={industrySlug} onChange={(e) => setIndustrySlug(e.target.value)} style={input}>
+                  <option value="">Select an industry…</option>
+                  {industries.map((ind) => (
+                    <option key={ind.slug} value={ind.slug}>{ind.display_name}</option>
+                  ))}
+                </select>
+              )}
             </label>
             <label style={fieldLabel}>
               Target / search

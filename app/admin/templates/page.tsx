@@ -4,6 +4,7 @@ import { templatesEnabled } from "@/lib/templates/config";
 import { tplDb } from "@/lib/templates/db";
 import { rollupCost, type CostRow } from "@/lib/templates/cost/rollup";
 import { CampaignsPanel, type CampaignSummary } from "@/components/admin/templates/CampaignsPanel";
+import type { TplIndustry } from "@/lib/templates/industries";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Template Sites — Website Reveals" };
@@ -16,9 +17,10 @@ export default async function TemplatesPage() {
   if (!user) redirect("/admin/login");
 
   const db = tplDb();
-  const [{ data: campaigns }, { data: costEvents }] = await Promise.all([
+  const [{ data: campaigns }, { data: costEvents }, { data: industries }] = await Promise.all([
     db.from("tpl_campaigns").select("*").order("created_at", { ascending: false }),
     db.from("tpl_cost_events").select("campaign_id, stage, usd"),
+    db.from("tpl_industries").select("*").order("display_name", { ascending: true }),
   ]);
 
   const costByCampaign = new Map<string, CostRow[]>();
@@ -51,7 +53,7 @@ export default async function TemplatesPage() {
   return (
     <div style={{ minHeight: "100vh", background: "#faf9f5", padding: "32px 24px 80px" }}>
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-        <CampaignsPanel campaigns={summaries} />
+        <CampaignsPanel campaigns={summaries} industries={(industries ?? []) as TplIndustry[]} />
       </div>
     </div>
   );

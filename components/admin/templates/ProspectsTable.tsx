@@ -31,6 +31,7 @@ export interface Prospect {
   stage: string;
   agent_id: string | null;
   record: CanonicalRecord;
+  tpl_mailings?: { status: string; scan_count: number; last_scanned_at: string | null }[];
 }
 
 const STAGES = ["scraped", "enriching", "qualified", "incomplete", "approved", "building", "live", "build_failed"];
@@ -260,12 +261,13 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
               <th style={{ ...th, textAlign: "center" }}>Site</th>
               <th style={{ ...th, textAlign: "center" }}>Complete</th>
               <th style={{ ...th, textAlign: "center" }}>Conf.</th>
+              <th style={{ ...th, textAlign: "center" }}>Mail</th>
               <th style={{ ...th, textAlign: "center" }}>Stage</th>
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={7} style={{ ...td, textAlign: "center", color: "#888886", padding: 28 }}>Loading…</td></tr>}
-            {!loading && prospects.length === 0 && <tr><td colSpan={7} style={{ ...td, textAlign: "center", color: "#888886", padding: 28 }}>No prospects match.</td></tr>}
+            {loading && <tr><td colSpan={8} style={{ ...td, textAlign: "center", color: "#888886", padding: 28 }}>Loading…</td></tr>}
+            {!loading && prospects.length === 0 && <tr><td colSpan={8} style={{ ...td, textAlign: "center", color: "#888886", padding: 28 }}>No prospects match.</td></tr>}
             {!loading && prospects.map((p) => {
               const missing = p.completeness?.missing ?? [];
               return (
@@ -281,6 +283,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
                   <td style={{ ...td, textAlign: "center" }}><SiteBadge status={p.website_status} /></td>
                   <td style={{ ...td, textAlign: "center" }}><CompletenessBadge missing={missing} /></td>
                   <td style={{ ...td, textAlign: "center", fontFamily: "var(--font-mono)" }}>{p.confidence != null ? p.confidence.toFixed(2) : "—"}</td>
+                  <td style={{ ...td, textAlign: "center" }}><MailBadge mailing={p.tpl_mailings?.[0]} /></td>
                   <td style={{ ...td, textAlign: "center" }}><span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#555553" }}>{p.stage}</span></td>
                 </tr>
               );
@@ -334,6 +337,31 @@ function SiteBadge({ status }: { status: string }) {
   };
   const m = map[status] ?? { c: "#888886", t: status };
   return <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: m.c }}>{m.t}</span>;
+}
+
+function MailBadge({ mailing }: { mailing?: { status: string; scan_count: number; last_scanned_at: string | null } }) {
+  if (!mailing) return <span style={{ color: "#c9c7c0", fontSize: 12 }}>—</span>;
+  const scans = mailing.scan_count ?? 0;
+  if (scans > 0) {
+    const when = mailing.last_scanned_at ? new Date(mailing.last_scanned_at).toLocaleString() : "";
+    return (
+      <span
+        title={`Last scan: ${when}`}
+        style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "#0a7a3d" }}
+      >
+        ▣ {scans}
+      </span>
+    );
+  }
+  const map: Record<string, { c: string; t: string }> = {
+    sent: { c: "#555553", t: "mailed" },
+    queued: { c: "#888886", t: "queued" },
+    undeliverable: { c: "#b3300a", t: "undeliv." },
+    failed: { c: "#b3300a", t: "failed" },
+    suppressed: { c: "#888886", t: "suppr." },
+  };
+  const m = map[mailing.status] ?? { c: "#888886", t: mailing.status };
+  return <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: m.c }} title="No scans yet">{m.t}</span>;
 }
 
 function CompletenessBadge({ missing }: { missing: string[] }) {

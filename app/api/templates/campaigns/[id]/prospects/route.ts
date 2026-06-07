@@ -25,9 +25,11 @@ export async function GET(
   const to = from + pageSize - 1;
 
   const db = tplDb();
+  // Embed the prospect's mailing (0 or 1, via the prospect_id FK) so the table
+  // can show mail status + QR scan activity without a second round trip.
   let query = db
     .from("tpl_prospects")
-    .select("*", { count: "exact" })
+    .select("*, tpl_mailings(status, scan_count, last_scanned_at)", { count: "exact" })
     .eq("campaign_id", id);
 
   const stage = sp.get("stage");

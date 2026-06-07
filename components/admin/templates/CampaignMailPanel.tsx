@@ -10,6 +10,12 @@ interface MailPreview {
   lobConfigured: boolean;
 }
 
+interface ScanRollup {
+  mailed: number;
+  prospectsScanned: number;
+  totalScans: number;
+}
+
 export function CampaignMailPanel({
   campaignId,
   initialDesignId,
@@ -26,19 +32,23 @@ export function CampaignMailPanel({
   const [savingField, setSavingField] = useState<null | "design" | "address">(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [scans, setScans] = useState<ScanRollup | null>(null);
 
   useEffect(() => {
     (async () => {
-      const [dRes, aRes] = await Promise.all([
+      const [dRes, aRes, sRes] = await Promise.all([
         fetch("/api/templates/postcard-designs"),
         fetch("/api/templates/return-addresses"),
+        fetch(`/api/templates/campaigns/${campaignId}/scans`),
       ]);
       const d = await dRes.json().catch(() => ({}));
       const a = await aRes.json().catch(() => ({}));
+      const s = await sRes.json().catch(() => ({}));
       if (dRes.ok) setDesigns(d.designs ?? []);
       if (aRes.ok) setAddresses(a.addresses ?? []);
+      if (sRes.ok) setScans({ mailed: s.mailed, prospectsScanned: s.prospectsScanned, totalScans: s.totalScans });
     })();
-  }, []);
+  }, [campaignId]);
 
   async function assign(field: "design" | "address", value: string) {
     setSavingField(field);
@@ -118,6 +128,19 @@ export function CampaignMailPanel({
         </button>
       </div>
 
+      {scans && scans.mailed > 0 && (
+        <div style={{ display: "flex", gap: 24, marginTop: 16, paddingTop: 14, borderTop: "1px solid #f0eeea" }}>
+          <ScanStat label="Mailed" value={scans.mailed} />
+          <ScanStat label="Scanned" value={scans.prospectsScanned} color="#0a7a3d" />
+          <ScanStat
+            label="Scan rate"
+            value={`${Math.round((scans.prospectsScanned / scans.mailed) * 100)}%`}
+            color="#0a7a3d"
+          />
+          <ScanStat label="Total scans" value={scans.totalScans} />
+        </div>
+      )}
+
       {(designs.length === 0 || addresses.length === 0) && (
         <p style={{ fontSize: 12, color: "#b36b00", marginTop: 10 }}>
           {designs.length === 0 && "No designs uploaded. "}{addresses.length === 0 && "No return addresses. "}
@@ -125,6 +148,15 @@ export function CampaignMailPanel({
         </p>
       )}
       {msg && <div style={msgBox}>{msg}</div>}
+    </div>
+  );
+}
+
+function ScanStat({ label, value, color }: { label: string; value: string | number; color?: string }) {
+  return (
+    <div>
+      <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "#888886" }}>{label}</div>
+      <div style={{ fontFamily: "var(--font-serif)", fontSize: 20, fontWeight: 700, color: color ?? "#111110" }}>{value}</div>
     </div>
   );
 }

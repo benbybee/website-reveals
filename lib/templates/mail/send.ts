@@ -9,6 +9,7 @@ import type { Address } from "@/lib/templates/types";
 import type { PostcardDesign, ReturnAddress } from "@/lib/templates/mail/types";
 import { toLobAddress, returnToLobAddress } from "@/lib/templates/mail/types";
 import { verifyUsAddress, createPostcard } from "@/lib/templates/mail/lob";
+import { generateQrToken, qrTrackingUrl } from "@/lib/templates/mail/qr";
 import { lobEnabled } from "@/lib/templates/config";
 
 // Per-card cost estimate (USD) for the spend-confirm gate + ledger. Lob's
@@ -133,7 +134,10 @@ export async function mailCampaign(
     }
 
     // Claim the prospect atomically. The UNIQUE(prospect_id) constraint means a
-    // concurrent run (or a prior partial) loses the race and we skip.
+    // concurrent run (or a prior partial) loses the race and we skip. The QR
+    // token is minted here so it is frozen on the card record before the Lob
+    // create call references it in merge_variables.
+    const qrToken = generateQrToken();
     const { error: claimErr } = await db.from("tpl_mailings").insert({
       prospect_id: p.id,
       campaign_id: campaignId,
@@ -142,6 +146,7 @@ export async function mailCampaign(
       status: "queued",
       address_snapshot: p.address,
       preview_url_snapshot: p.preview_url,
+      qr_token: qrToken,
     });
     if (claimErr) {
       result.skipped++; // already claimed/mailed (unique violation) or insert error
@@ -174,7 +179,9 @@ export async function mailCampaign(
         merge_variables: {
           business_name: p.business_name ?? "",
           preview_url: p.preview_url ?? "",
-          qr_url: p.preview_url ?? "",
+          // Tracked redirect — scans are logged + attributed before forwarding to
+          // the preview. The HTML back-template should encode qr_url as the QR.
+          qr_url: qrTrackingUrl(qrToken),
         },
         idempotency_key: `tpl-mail-${p.id}`,
       });

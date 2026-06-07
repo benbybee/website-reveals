@@ -56,6 +56,10 @@ export interface Mailing {
   preview_url_snapshot: string | null;
   cost_usd: number | null;
   error: string | null;
+  qr_token: string | null;
+  scan_count: number;
+  first_scanned_at: string | null;
+  last_scanned_at: string | null;
   created_at: string;
   sent_at: string | null;
 }

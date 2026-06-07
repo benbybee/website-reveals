@@ -43,6 +43,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
           campaignId={id}
           initialDesignId={(c.postcard_design_id as string) ?? null}
           initialAddressId={(c.return_address_id as string) ?? null}
+          initialProvider={(c.mail_provider as string) ?? "lob"}
         />
       </div>
     </div>

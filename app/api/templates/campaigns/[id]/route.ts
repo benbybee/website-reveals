@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
-import { templatesEnabled } from "@/lib/templates/config";
+import { templatesEnabled, type MailProvider } from "@/lib/templates/config";
 import { tplDb } from "@/lib/templates/db";
+
+const MAIL_PROVIDERS: MailProvider[] = ["lob", "click2mail", "export"];
 
 interface PatchBody {
   postcard_design_id?: string | null;
   return_address_id?: string | null;
+  mail_provider?: string;
 }
 
 // Assign (or clear) the postcard design + return address used when mailing this
@@ -40,12 +43,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     patch.return_address_id = body.return_address_id;
   }
+  if (body.mail_provider !== undefined) {
+    if (!MAIL_PROVIDERS.includes(body.mail_provider as MailProvider)) {
+      return NextResponse.json({ error: "invalid_mail_provider" }, { status: 400 });
+    }
+    patch.mail_provider = body.mail_provider;
+  }
 
   const { data, error } = await db
     .from("tpl_campaigns")
     .update(patch)
     .eq("id", id)
-    .select("id, postcard_design_id, return_address_id")
+    .select("id, postcard_design_id, return_address_id, mail_provider")
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, campaign: data });

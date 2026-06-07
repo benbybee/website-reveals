@@ -50,6 +50,8 @@ export interface Mailing {
   design_id: string | null;
   return_address_id: string | null;
   status: MailingStatus;
+  provider: string | null;
+  provider_job_id: string | null;
   lob_id: string | null;
   tracking_url: string | null;
   address_snapshot: Address | null;

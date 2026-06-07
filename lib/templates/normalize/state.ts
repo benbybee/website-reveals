@@ -34,3 +34,8 @@ export function toStateName(raw: string | null | undefined): string | null {
   const full = ABBR_TO_FULL[abbr];
   return full ? full.replace(/\b\w/g, (c) => c.toUpperCase()) : null;
 }
+
+/** All US states + DC as { abbr, name }, sorted by name — for select inputs. */
+export const US_STATES: { abbr: string; name: string }[] = Object.entries(FULL_TO_ABBR)
+  .map(([full, abbr]) => ({ abbr, name: full.replace(/\b\w/g, (c) => c.toUpperCase()) }))
+  .sort((a, b) => a.name.localeCompare(b.name));

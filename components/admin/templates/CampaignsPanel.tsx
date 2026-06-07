@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { TplIndustry } from "@/lib/templates/industries";
+import { US_STATES } from "@/lib/templates/normalize/state";
 
 export interface CampaignSummary {
   id: string;
@@ -149,7 +150,10 @@ export function CampaignsPanel({ campaigns, industries }: { campaigns: CampaignS
           <div style={{ marginBottom: 8, ...fieldLabel }}>Locations</div>
           {locations.map((loc, i) => (
             <div key={i} style={{ display: "grid", gridTemplateColumns: "100px 1fr 32px", gap: 10, marginBottom: 8 }}>
-              <input value={loc.state} onChange={(e) => updateLocation(i, { state: e.target.value })} placeholder="State (AZ)" style={input} />
+              <select value={loc.state} onChange={(e) => updateLocation(i, { state: e.target.value })} style={input}>
+                <option value="">State…</option>
+                {US_STATES.map((s) => <option key={s.abbr} value={s.abbr}>{s.name} ({s.abbr})</option>)}
+              </select>
               <input value={loc.city} onChange={(e) => updateLocation(i, { city: e.target.value })} placeholder="City (optional)" style={input} />
               <button type="button" onClick={() => setLocations((p) => p.filter((_, idx) => idx !== i))} style={iconBtn} disabled={locations.length === 1}>×</button>
             </div>

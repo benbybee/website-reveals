@@ -3,20 +3,41 @@ import { APIFY_TOKEN } from "../config";
 import { estimateUsd } from "./costs";
 
 const APIFY_BASE = "https://api.apify.com/v2";
+// Apify caps the waitForFinish blocking window at 60s; we re-poll for longer runs.
+const WAIT_FOR_FINISH_S = 60;
+// Overall ceiling for a single actor run before we give up (Places/FB are short).
+const RUN_TIMEOUT_MS = 5 * 60 * 1000;
+const TERMINAL_STATUSES = new Set(["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT", "TIMED_OUT"]);
 
 export interface ActorRunResult {
   items: unknown[];
   runId: string | null;
 }
 
+interface ApifyRun {
+  id?: string;
+  status?: string;
+  defaultDatasetId?: string;
+}
+
+function parseRun(text: string, actorId: string): ApifyRun {
+  try {
+    const parsed = text ? JSON.parse(text) : {};
+    return ((parsed as { data?: ApifyRun }).data ?? {}) as ApifyRun;
+  } catch {
+    throw new Error(`Apify actor ${actorId} returned a non-JSON run body`);
+  }
+}
+
 /**
- * Run an Apify actor synchronously and return both its dataset items and the
- * run id. We use `run-sync` (not `run-sync-get-dataset-items`) precisely because
- * the latter returns ONLY the items array — no run id — so we'd have no way to
- * look up the real billed cost. `run-sync` returns the full run object (id,
- * defaultDatasetId, usageTotalUsd), and we then fetch the items from that
- * dataset. Two calls, but it gives us an authoritative run id with no reliance
- * on an undocumented header and no "last run" race under concurrent locations.
+ * Run an Apify actor and return both its dataset items and the run id. We start
+ * the run ASYNC (`POST /acts/{id}/runs`) with `waitForFinish=60` rather than the
+ * `run-sync*` endpoints: the sync endpoints return only the actor OUTPUT/items
+ * with NO run id, so we'd have no way to look up the real billed cost. The async
+ * run endpoint returns the full run object (id, status, defaultDatasetId,
+ * usageTotalUsd); we block up to 60s, re-poll for anything longer, then fetch
+ * items from the run's dataset. Authoritative run id, no undocumented header,
+ * no "last run" race across concurrent campaigns.
  *
  * Actor ids use the `owner/name` form here, converted to Apify's `owner~name`.
  */
@@ -24,41 +45,48 @@ export async function runActor(actorId: string, input: unknown): Promise<ActorRu
   const token = APIFY_TOKEN();
   if (!token) throw new Error("APIFY_TOKEN is not configured");
   const actorPath = actorId.replace("/", "~");
-  const runUrl = `${APIFY_BASE}/acts/${actorPath}/run-sync?token=${encodeURIComponent(token)}`;
+  const tok = encodeURIComponent(token);
 
-  const runRes = await fetch(runUrl, {
+  const startUrl = `${APIFY_BASE}/acts/${actorPath}/runs?token=${tok}&waitForFinish=${WAIT_FOR_FINISH_S}`;
+  const startRes = await fetch(startUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
   });
-
-  const runText = await runRes.text();
-  if (runRes.status < 200 || runRes.status >= 300) {
-    throw new Error(`Apify actor ${actorId} failed: ${runRes.status} ${runText.slice(0, 300)}`);
+  const startText = await startRes.text();
+  if (startRes.status < 200 || startRes.status >= 300) {
+    throw new Error(`Apify actor ${actorId} failed to start: ${startRes.status} ${startText.slice(0, 300)}`);
   }
 
-  let run: { id?: string; defaultDatasetId?: string };
-  try {
-    const parsed = runText ? JSON.parse(runText) : {};
-    run = (parsed as { data?: typeof run }).data ?? {};
-  } catch {
-    throw new Error(`Apify actor ${actorId} returned non-JSON run body`);
+  let run = parseRun(startText, actorId);
+  if (!run.id) throw new Error(`Apify actor ${actorId} returned no run id`);
+
+  const deadline = Date.now() + RUN_TIMEOUT_MS;
+  while (!TERMINAL_STATUSES.has(run.status ?? "") && Date.now() < deadline) {
+    const pollRes = await fetch(`${APIFY_BASE}/actor-runs/${run.id}?token=${tok}&waitForFinish=${WAIT_FOR_FINISH_S}`);
+    const pollText = await pollRes.text();
+    if (pollRes.status < 200 || pollRes.status >= 300) {
+      throw new Error(`Apify run ${run.id} poll failed: ${pollRes.status} ${pollText.slice(0, 200)}`);
+    }
+    run = parseRun(pollText, actorId);
   }
 
-  const datasetId = run.defaultDatasetId;
+  if (run.status !== "SUCCEEDED") {
+    throw new Error(`Apify actor ${actorId} run ${run.id} ended ${run.status ?? "UNKNOWN (timed out waiting)"}`);
+  }
+
   let items: unknown[] = [];
-  if (datasetId) {
-    const itemsUrl = `${APIFY_BASE}/datasets/${datasetId}/items?token=${encodeURIComponent(token)}&format=json`;
-    const itemsRes = await fetch(itemsUrl);
+  if (run.defaultDatasetId) {
+    const itemsRes = await fetch(`${APIFY_BASE}/datasets/${run.defaultDatasetId}/items?token=${tok}&format=json`);
     if (itemsRes.status < 200 || itemsRes.status >= 300) {
       const t = await itemsRes.text().catch(() => "");
-      throw new Error(`Apify dataset ${datasetId} fetch failed: ${itemsRes.status} ${t.slice(0, 200)}`);
+      throw new Error(`Apify dataset ${run.defaultDatasetId} fetch failed: ${itemsRes.status} ${t.slice(0, 200)}`);
     }
     try {
       const parsed = await itemsRes.json();
       items = Array.isArray(parsed) ? parsed : [];
     } catch {
-      throw new Error(`Apify dataset ${datasetId} returned non-JSON body`);
+      throw new Error(`Apify dataset ${run.defaultDatasetId} returned a non-JSON body`);
     }
   }
 

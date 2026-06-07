@@ -14,6 +14,9 @@ const FULL_TO_ABBR: Record<string, string> = {
 };
 
 const VALID_ABBR = new Set(Object.values(FULL_TO_ABBR));
+const ABBR_TO_FULL: Record<string, string> = Object.fromEntries(
+  Object.entries(FULL_TO_ABBR).map(([full, abbr]) => [abbr, full]),
+);
 
 export function toStateAbbr(raw: string | null | undefined): string | null {
   if (!raw) return null;
@@ -22,4 +25,12 @@ export function toStateAbbr(raw: string | null | undefined): string | null {
   const upper = trimmed.toUpperCase();
   if (trimmed.length === 2 && VALID_ABBR.has(upper)) return upper;
   return FULL_TO_ABBR[trimmed.toLowerCase()] ?? null;
+}
+
+/** Title-cased full US state name for an abbreviation or full name, else null. */
+export function toStateName(raw: string | null | undefined): string | null {
+  const abbr = toStateAbbr(raw);
+  if (!abbr) return null;
+  const full = ABBR_TO_FULL[abbr];
+  return full ? full.replace(/\b\w/g, (c) => c.toUpperCase()) : null;
 }

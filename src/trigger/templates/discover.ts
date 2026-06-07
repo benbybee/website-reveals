@@ -2,6 +2,7 @@ import { task, tasks, logger } from "@trigger.dev/sdk/v3";
 import { tplDb } from "@/lib/templates/db";
 import { runActor, recordCostFromRun } from "@/lib/templates/apify/client";
 import { mapPlaceToRecord, type PlaceItem } from "@/lib/templates/apify/places";
+import { toStateName } from "@/lib/templates/normalize/state";
 import { TPL_TASK_IDS } from "@/lib/templates/trigger/ids";
 
 const PLACES_ACTOR = "compass/crawler-google-places";
@@ -58,7 +59,11 @@ export const tplDiscoverTask = task({
     for (const loc of camp.locations ?? []) {
       const state = (loc.state ?? "").trim();
       if (!state) continue;
-      const locationQuery = loc.city ? `${loc.city}, ${state}` : state;
+      // Expand the state to its full US name and scope to "USA" so Google Places
+      // can't resolve a bare 2-letter code to a country (e.g. "CA" -> Canada
+      // instead of California). Fall back to the raw input for unknown values.
+      const region = toStateName(state) ?? state;
+      const locationQuery = loc.city ? `${loc.city}, ${region}, USA` : `${region}, USA`;
 
       logger.info("discover: running places", { locationQuery, categories });
       const { items, runId } = await runActor(PLACES_ACTOR, {

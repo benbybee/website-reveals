@@ -1,10 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { Prospect } from "./ProspectsTable";
 
 const EDITABLE = ["business_name", "city", "state", "phone", "website", "website_status"] as const;
 const STAGES = ["scraped", "qualified", "incomplete", "approved", "building", "live", "build_failed"];
+const CALL_OUTCOMES: { value: string; label: string }[] = [
+  { value: "connected", label: "Connected" },
+  { value: "voicemail", label: "Left voicemail" },
+  { value: "no_answer", label: "No answer" },
+  { value: "callback", label: "Callback scheduled" },
+  { value: "not_interested", label: "Not interested" },
+  { value: "wrong_number", label: "Wrong number" },
+];
+
+interface ActivityItem {
+  id: string;
+  kind: string;
+  body: string | null;
+  outcome: string | null;
+  from_stage: string | null;
+  to_stage: string | null;
+  agent_id: string | null;
+  created_at: string;
+}
 
 export function ProspectDrawer({
   prospectId,
@@ -26,6 +45,20 @@ export function ProspectDrawer({
   const [saving, setSaving] = useState(false);
   const [noteKind, setNoteKind] = useState<"note" | "call">("note");
   const [noteBody, setNoteBody] = useState("");
+  const [outcome, setOutcome] = useState("connected");
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+
+  const loadActivity = useCallback(async () => {
+    const res = await fetch(`/api/templates/sales/activity?prospect_id=${prospectId}`);
+    if (res.ok) {
+      const j = (await res.json()) as { activity?: ActivityItem[] };
+      setActivity(j.activity ?? []);
+    }
+  }, [prospectId]);
+
+  useEffect(() => {
+    loadActivity();
+  }, [loadActivity]);
 
   if (!prospect) return null;
   const record = prospect.record;
@@ -52,14 +85,27 @@ export function ProspectDrawer({
   }
 
   async function logActivity() {
-    if (!noteBody.trim()) return;
+    const isCall = noteKind === "call";
+    // A call can be logged with just an outcome; a note requires text.
+    if (!isCall && !noteBody.trim()) return;
     const res = await fetch(`/api/templates/sales/activity`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ prospect_id: prospectId, kind: noteKind, body: noteBody.trim() }),
+      body: JSON.stringify({
+        prospect_id: prospectId,
+        kind: noteKind,
+        outcome: isCall ? outcome : undefined,
+        body: isCall
+          ? (noteBody.trim() || CALL_OUTCOMES.find((o) => o.value === outcome)?.label || outcome)
+          : noteBody.trim(),
+      }),
     });
-    if (res.ok) setNoteBody("");
-    else alert("Failed to log activity");
+    if (res.ok) {
+      setNoteBody("");
+      loadActivity();
+    } else {
+      alert("Failed to log activity");
+    }
   }
 
   return (
@@ -118,11 +164,45 @@ export function ProspectDrawer({
             <option value="note">Note</option>
             <option value="call">Call</option>
           </select>
+          {noteKind === "call" && (
+            <select value={outcome} onChange={(e) => setOutcome(e.target.value)} style={{ ...input, flex: 1 }}>
+              {CALL_OUTCOMES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          )}
         </div>
-        <textarea value={noteBody} onChange={(e) => setNoteBody(e.target.value)} placeholder="What happened…" style={{ ...input, minHeight: 64, resize: "vertical" }} />
+        <textarea value={noteBody} onChange={(e) => setNoteBody(e.target.value)} placeholder={noteKind === "call" ? "Call notes (optional)…" : "What happened…"} style={{ ...input, minHeight: 64, resize: "vertical" }} />
         <button onClick={logActivity} style={{ ...ghostBtn, marginTop: 8 }}>Log {noteKind}</button>
+
+        <SectionTitle>History</SectionTitle>
+        {activity.length === 0 ? (
+          <span style={{ fontSize: 12, color: "#888886" }}>No activity logged yet.</span>
+        ) : (
+          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+            {activity.map((a) => <ActivityRow key={a.id} item={a} />)}
+          </ul>
+        )}
       </div>
     </>
+  );
+}
+
+const OUTCOME_LABEL: Record<string, string> = Object.fromEntries(CALL_OUTCOMES.map((o) => [o.value, o.label]));
+
+function ActivityRow({ item }: { item: ActivityItem }) {
+  const when = new Date(item.created_at).toLocaleString();
+  let head: string;
+  if (item.kind === "call") head = `☎ Call — ${item.outcome ? (OUTCOME_LABEL[item.outcome] ?? item.outcome) : "logged"}`;
+  else if (item.kind === "stage_change") head = `→ ${item.from_stage ?? "?"} → ${item.to_stage ?? "?"}`;
+  else head = "✎ Note";
+  return (
+    <li style={{ borderLeft: "2px solid #e8e6df", paddingLeft: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, color: "#555553" }}>{head}</span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "#888886", flexShrink: 0 }}>{when}</span>
+      </div>
+      {item.body && <div style={{ fontSize: 12, color: "#111110", marginTop: 2, wordBreak: "break-word" }}>{item.body}</div>}
+      {item.agent_id && <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "#888886", marginTop: 2 }}>{item.agent_id}</div>}
+    </li>
   );
 }
 

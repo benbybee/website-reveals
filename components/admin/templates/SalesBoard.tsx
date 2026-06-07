@@ -15,15 +15,29 @@ export interface SalesProspect {
   stage: string;
   agent_id: string | null;
   preview_url: string | null;
+  scan_count: number;
+  last_scanned_at: string | null;
+  call_count: number;
+  last_called_at: string | null;
 }
 
 export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesProspect[]; userEmail: string; stages: string[] }) {
   const router = useRouter();
   const [mineOnly, setMineOnly] = useState(false);
+  const [scannedFirst, setScannedFirst] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [convertFor, setConvertFor] = useState<SalesProspect | null>(null);
+  const [callFor, setCallFor] = useState<SalesProspect | null>(null);
 
-  const visible = mineOnly ? prospects.filter((p) => p.agent_id === userEmail) : prospects;
+  const filtered = mineOnly ? prospects.filter((p) => p.agent_id === userEmail) : prospects;
+  // "Scanned first" surfaces the prospects most likely to convert (90-95% of
+  // sales come from scanners). Sort by scan_count desc, then most-recent scan.
+  const visible = scannedFirst
+    ? [...filtered].sort((a, b) => {
+        if (b.scan_count !== a.scan_count) return b.scan_count - a.scan_count;
+        return (b.last_scanned_at ?? "").localeCompare(a.last_scanned_at ?? "");
+      })
+    : filtered;
 
   async function setStage(id: string, stage: string) {
     setBusyId(id);
@@ -39,24 +53,20 @@ export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesP
     }
   }
 
-  async function logCall(id: string) {
-    const body = prompt("Call notes:");
-    if (!body) return;
-    await fetch(`/api/templates/sales/activity`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ prospect_id: id, kind: "call", body, agent_id: userEmail }),
-    });
-  }
-
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
         <Link href="/admin/templates" style={{ fontSize: 13, color: "#888886", textDecoration: "none" }}>← Template Sites</Link>
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#555553" }}>
-          <input type="checkbox" checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} />
-          My prospects only
-        </label>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#555553" }}>
+            <input type="checkbox" checked={scannedFirst} onChange={(e) => setScannedFirst(e.target.checked)} />
+            Scanned first
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#555553" }}>
+            <input type="checkbox" checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} />
+            My prospects only
+          </label>
+        </div>
       </div>
       <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "1.75rem", fontWeight: 700, marginBottom: 18 }}>Sales board</h1>
 
@@ -67,6 +77,8 @@ export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesP
               <th style={th}>Business</th>
               <th style={th}>Location</th>
               <th style={th}>Phone</th>
+              <th style={{ ...th, width: 70 }}>Scan</th>
+              <th style={{ ...th, width: 70 }}>Calls</th>
               <th style={th}>Preview</th>
               <th style={th}>Agent</th>
               <th style={{ ...th, width: 160 }}>Stage</th>
@@ -74,7 +86,7 @@ export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesP
             </tr>
           </thead>
           <tbody>
-            {visible.length === 0 && <tr><td colSpan={7} style={{ ...td, textAlign: "center", color: "#888886", padding: 28 }}>No prospects in the sales funnel.</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={9} style={{ ...td, textAlign: "center", color: "#888886", padding: 28 }}>No prospects in the sales funnel.</td></tr>}
             {visible.map((p) => (
               <tr key={p.id} style={{ borderTop: "1px solid #f0eeea" }}>
                 <td style={td}><span style={{ fontWeight: 600, color: "#111110" }}>{p.business_name || "—"}</span></td>
@@ -82,6 +94,8 @@ export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesP
                 <td style={td}>
                   {p.phone ? <a href={`tel:${p.phone}`} style={{ color: "#ff3d00", textDecoration: "none", fontFamily: "var(--font-mono)", fontSize: 12 }}>{p.phone}</a> : <span style={{ color: "#bbb" }}>—</span>}
                 </td>
+                <td style={{ ...td, textAlign: "center" }}><ScanBadge count={p.scan_count} lastScannedAt={p.last_scanned_at} /></td>
+                <td style={{ ...td, textAlign: "center" }}><CallBadge count={p.call_count} lastCalledAt={p.last_called_at} /></td>
                 <td style={td}>
                   {p.preview_url ? <a href={p.preview_url} target="_blank" rel="noreferrer" style={{ color: "#0a4a7a", fontSize: 12 }}>view →</a> : <span style={{ color: "#bbb", fontSize: 12 }}>—</span>}
                 </td>
@@ -100,7 +114,7 @@ export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesP
                   {p.stage === "live" && (
                     <button onClick={() => setConvertFor(p)} style={convertBtn}>Convert</button>
                   )}
-                  <button onClick={() => logCall(p.id)} style={ghostBtn}>Log call</button>
+                  <button onClick={() => setCallFor(p)} style={ghostBtn}>Log call</button>
                 </td>
               </tr>
             ))}
@@ -119,6 +133,135 @@ export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesP
           }}
         />
       )}
+
+      {callFor && (
+        <LogCallModal
+          prospect={callFor}
+          agentEmail={userEmail}
+          onClose={() => setCallFor(null)}
+          onLogged={() => {
+            setCallFor(null);
+            router.refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Green scan pill when a prospect scanned their postcard — the strongest buy
+ * signal on the board. Grey dash when no scan recorded. */
+function ScanBadge({ count, lastScannedAt }: { count: number; lastScannedAt: string | null }) {
+  if (count <= 0) return <span style={{ color: "#c9c7c0", fontSize: 12 }} title="No scan recorded">—</span>;
+  const when = lastScannedAt ? new Date(lastScannedAt).toLocaleDateString() : "";
+  return (
+    <span
+      title={`Scanned ${count}×${when ? ` — last ${when}` : ""}`}
+      style={{ display: "inline-block", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "#0a7a3d", background: "#e7f5ec", border: "1px solid #b7e0c4", borderRadius: 4, padding: "2px 6px" }}
+    >
+      ▣ {count}
+    </span>
+  );
+}
+
+/** Call-count pill with last-called date on hover. */
+function CallBadge({ count, lastCalledAt }: { count: number; lastCalledAt: string | null }) {
+  if (count <= 0) return <span style={{ color: "#c9c7c0", fontSize: 12 }} title="Not called yet">—</span>;
+  const when = lastCalledAt ? new Date(lastCalledAt).toLocaleDateString() : "";
+  return (
+    <span
+      title={`Called ${count}×${when ? ` — last ${when}` : ""}`}
+      style={{ display: "inline-block", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "#555553", background: "#f0eeea", border: "1px solid #d8d6cf", borderRadius: 4, padding: "2px 6px" }}
+    >
+      ☎ {count}
+    </span>
+  );
+}
+
+const CALL_OUTCOMES: { value: string; label: string }[] = [
+  { value: "connected", label: "Connected" },
+  { value: "voicemail", label: "Left voicemail" },
+  { value: "no_answer", label: "No answer" },
+  { value: "callback", label: "Callback scheduled" },
+  { value: "not_interested", label: "Not interested" },
+  { value: "wrong_number", label: "Wrong number" },
+];
+
+/** Structured call-log form: outcome dropdown + notes, replacing the old
+ * window.prompt. Posts to the activity endpoint which routes calls through the
+ * atomic tpl_log_call RPC (bumps call_count + last_called_at). */
+function LogCallModal({
+  prospect,
+  agentEmail,
+  onClose,
+  onLogged,
+}: {
+  prospect: SalesProspect;
+  agentEmail: string;
+  onClose: () => void;
+  onLogged: () => void;
+}) {
+  const [outcome, setOutcome] = useState("connected");
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/templates/sales/activity`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          prospect_id: prospect.id,
+          kind: "call",
+          outcome,
+          // body is required by the endpoint; fall back to the outcome label.
+          body: notes.trim() || CALL_OUTCOMES.find((o) => o.value === outcome)?.label || outcome,
+          agent_id: agentEmail,
+        }),
+      });
+      if (res.ok) {
+        onLogged();
+        return;
+      }
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      setError(`Failed to log call: ${data.error ?? `HTTP ${res.status}`}`);
+    } catch (e) {
+      setError(`Network error: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div role="dialog" aria-modal="true" style={overlay} onClick={onClose}>
+      <div style={modal} onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ fontFamily: "var(--font-serif)", fontSize: "1.25rem", fontWeight: 700, margin: "0 0 4px" }}>
+          Log call — {prospect.business_name || "prospect"}
+        </h2>
+        <p style={{ fontSize: 12, color: "#888886", margin: "0 0 16px" }}>
+          Called {prospect.call_count}× so far. Agent: {agentEmail}
+        </p>
+
+        <label style={lbl}>Outcome *</label>
+        <select style={{ ...inp, fontFamily: "var(--font-sans)" }} value={outcome} onChange={(e) => setOutcome(e.target.value)} autoFocus>
+          {CALL_OUTCOMES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+
+        <label style={lbl}>Notes</label>
+        <textarea style={{ ...inp, minHeight: 80, resize: "vertical" }} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="What was discussed, next steps…" />
+
+        {error && <div style={errBox}>{error}</div>}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
+          <button onClick={onClose} style={ghostBtn} disabled={submitting}>Cancel</button>
+          <button onClick={submit} style={{ ...convertBtn, opacity: submitting ? 0.5 : 1, cursor: submitting ? "not-allowed" : "pointer" }} disabled={submitting}>
+            {submitting ? "Saving…" : "Save call"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

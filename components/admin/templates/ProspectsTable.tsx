@@ -31,6 +31,8 @@ export interface Prospect {
   stage: string;
   agent_id: string | null;
   record: CanonicalRecord;
+  call_count?: number;
+  last_called_at?: string | null;
   tpl_mailings?: { status: string; scan_count: number; last_scanned_at: string | null }[];
 }
 
@@ -262,12 +264,13 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
               <th style={{ ...th, textAlign: "center" }}>Complete</th>
               <th style={{ ...th, textAlign: "center" }}>DNA</th>
               <th style={{ ...th, textAlign: "center" }}>Mail</th>
+              <th style={{ ...th, textAlign: "center" }}>Calls</th>
               <th style={{ ...th, textAlign: "center" }}>Stage</th>
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={8} style={{ ...td, textAlign: "center", color: "#888886", padding: 28 }}>Loading…</td></tr>}
-            {!loading && prospects.length === 0 && <tr><td colSpan={8} style={{ ...td, textAlign: "center", color: "#888886", padding: 28 }}>No prospects match.</td></tr>}
+            {loading && <tr><td colSpan={9} style={{ ...td, textAlign: "center", color: "#888886", padding: 28 }}>Loading…</td></tr>}
+            {!loading && prospects.length === 0 && <tr><td colSpan={9} style={{ ...td, textAlign: "center", color: "#888886", padding: 28 }}>No prospects match.</td></tr>}
             {!loading && prospects.map((p) => {
               const missing = p.completeness?.missing ?? [];
               return (
@@ -284,6 +287,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
                   <td style={{ ...td, textAlign: "center" }}><CompletenessBadge missing={missing} /></td>
                   <td style={{ ...td, textAlign: "center" }}><DnaBadge record={p.record} stage={p.stage} websiteStatus={p.website_status} /></td>
                   <td style={{ ...td, textAlign: "center" }}><MailBadge mailing={p.tpl_mailings?.[0]} /></td>
+                  <td style={{ ...td, textAlign: "center" }}><CallBadge count={p.call_count ?? 0} lastCalledAt={p.last_called_at ?? null} /></td>
                   <td style={{ ...td, textAlign: "center" }}><span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#555553" }}>{p.stage}</span></td>
                 </tr>
               );
@@ -362,6 +366,16 @@ function MailBadge({ mailing }: { mailing?: { status: string; scan_count: number
   };
   const m = map[mailing.status] ?? { c: "#888886", t: mailing.status };
   return <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: m.c }} title="No scans yet">{m.t}</span>;
+}
+
+function CallBadge({ count, lastCalledAt }: { count: number; lastCalledAt: string | null }) {
+  if (count <= 0) return <span style={{ color: "#c9c7c0", fontSize: 12 }} title="Not called yet">—</span>;
+  const when = lastCalledAt ? new Date(lastCalledAt).toLocaleString() : "";
+  return (
+    <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "#555553" }} title={`Called ${count}×${when ? ` — last ${when}` : ""}`}>
+      ☎ {count}
+    </span>
+  );
 }
 
 function CompletenessBadge({ missing }: { missing: string[] }) {

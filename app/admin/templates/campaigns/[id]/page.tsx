@@ -26,6 +26,7 @@ export default async function CampaignDetailPage({ params }: { params: Promise<{
   const header: CampaignHeader = {
     id,
     industry_slug: c.industry_slug as string,
+    name: (c.name as string) ?? null,
     status: c.status as string,
     scraped_count: (c.scraped_count as number) ?? 0,
     qualified_count: (c.qualified_count as number) ?? 0,

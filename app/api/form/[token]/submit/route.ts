@@ -13,7 +13,7 @@ import { dispatchBuild, SiteLaunchrError } from "@/lib/sitelaunchr";
 import { buildSiteLaunchrPayload, shouldRouteToSiteLaunchr } from "@/lib/sitelaunchr-mapper";
 import { isNotificationEnabled, audienceForSubmission } from "@/lib/notification-settings";
 import { notifyDispatchr, buildBriefPreview } from "@/lib/dispatchr-webhook";
-import { resolveIndustryReferences, logOtherSubmission } from "@/lib/industries";
+import { intakeSalesProspect } from "@/lib/templates/salesIntake";
 
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
@@ -71,56 +71,24 @@ export async function POST(
   let salesRepId: string | null = null;
   let salesRepEmail: string | null = null;
   let salesRepFirstName: string | null = null;
+  let salesRepLastName: string | null = null;
   if (submissionSource === "sales") {
     const repEmail = (formData.contact_email as string) || "";
     if (repEmail) {
       const { data: rep } = await supabase
         .from("sales_reps")
-        .select("id, email, first_name")
+        .select("id, email, first_name, last_name")
         .ilike("email", repEmail)
         .eq("active", true)
         .maybeSingle();
       salesRepId = rep?.id || null;
       salesRepEmail = rep?.email || null;
       salesRepFirstName = (rep?.first_name as string) || null;
+      salesRepLastName = (rep?.last_name as string) || null;
     }
   }
 
-  // Inject admin-curated reference URLs based on industry_slug. For the 10
-  // fixed categories, look up the slug directly. For "other", let the alias
-  // matcher try to resolve to a real category. Either way we mutate formData
-  // here so the SL mapper sees the inspiration_sites string later, AND we
-  // persist the mutation back to form_sessions so admin tooling sees the
-  // same data the dispatch saw. Every "Other" submission gets an
-  // industry_other_log row regardless of match outcome.
-  if (submissionSource === "sales") {
-    const industrySlug = (formData.industry_slug as string) || "";
-    const industryOther = (formData.industry_other_text as string) || "";
-    if (industrySlug) {
-      try {
-        const resolved = await resolveIndustryReferences({
-          industrySlug,
-          otherText: industryOther,
-        });
-        if (resolved.urls.length > 0) {
-          formData.inspiration_sites = resolved.urls.join("\n");
-        }
-        if (industrySlug === "other") {
-          await logOtherSubmission({
-            formToken: token,
-            rawText: industryOther,
-            resolvedSlug: resolved.matchedAlias?.industry_slug || null,
-            status: resolved.matchedAlias ? "auto_mapped" : "pending",
-          });
-        }
-      } catch (refErr) {
-        console.error("[submit] industry reference lookup failed:", refErr);
-      }
-    }
-  }
-
-  // Mark as submitted + attach sales rep if applicable + persist any
-  // mutations we made to form_data above (inspiration_sites injection).
+  // Mark as submitted + attach sales rep if applicable.
   await supabase
     .from("form_sessions")
     .update({
@@ -141,56 +109,27 @@ export async function POST(
   let clientId: string | undefined;
 
   if (isSalesSubmission) {
-    // ── Sales path ──
-    // Every /sales submission represents a DIFFERENT business; the sales rep
-    // is associated via sales_rep_id, not by sharing the client.email field.
-    // We always create a fresh client per submission (no dedup by rep email),
-    // and use the business's own email if provided — or a synthetic
-    // @websitereveals.local address keyed on the token if not.
-    const businessEmail = (formData.email as string) || "";
-    const businessPhone = (formData.phone as string) || (formData.contact_phone as string) || "";
-    const slug = businessName
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 40);
-    const syntheticEmail = `nomail-${slug || "client"}-${token.slice(0, 8)}@websitereveals.local`;
-    const preferredEmail = businessEmail && businessEmail.includes("@") ? businessEmail : syntheticEmail;
-
-    const buildClient = async (email: string) => {
-      const { client } = await createClient({
-        first_name: businessName || "Client",
-        last_name: "",
-        company_name: businessName || "Unknown",
-        email,
-        phone: businessPhone,
-        website_url: formData.current_website as string,
-        form_session_token: token,
-        sales_rep_id: salesRepId,
-      });
-      return client;
-    };
-
+    // ── Sales path → Template flow ──
+    // A /sales submission no longer creates a client/task or dispatches to SL.
+    // It lands as a HELD prospect in the submitting rep's "sales" campaign and
+    // waits there until a template exists for its industry; the operator then
+    // releases it through the template Approve → Push → Convert (Kura) pipeline.
     try {
-      try {
-        const client = await buildClient(preferredEmail);
-        clientId = client.id;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        // Real business email already in use → fall back to synthetic so we
-        // still get a dedicated client record per submission.
-        if (msg.toLowerCase().includes("duplicate") && preferredEmail !== syntheticEmail) {
-          console.warn(`[submit:sales] Business email ${preferredEmail} collided; using synthetic.`);
-          const client = await buildClient(syntheticEmail);
-          clientId = client.id;
-        } else {
-          throw err;
-        }
-      }
-      // Welcome email intentionally skipped for sales submissions — the rep
-      // manages the client and the synthetic email isn't deliverable anyway.
-    } catch (clientErr) {
-      console.error("[submit:sales] Client creation failed:", clientErr);
+      const intake = await intakeSalesProspect({
+        token,
+        formData,
+        rep: {
+          id: salesRepId,
+          email: salesRepEmail || (formData.contact_email as string) || null,
+          firstName: salesRepFirstName,
+          lastName: salesRepLastName,
+        },
+      });
+      console.log(
+        `[submit:sales] Held in template flow — campaign ${intake.campaignId}, prospect ${intake.prospectId}`,
+      );
+    } catch (intakeErr) {
+      console.error("[submit:sales] Template intake failed:", intakeErr);
     }
   } else if (
     (formData.contact_email as string) ||
@@ -297,87 +236,65 @@ export async function POST(
   }
 
   // ── Queue automated website build via SiteLaunchr ──────────
-  // The Claude-Code-on-VPS pipeline has been retired; SiteLaunchr is the
-  // canonical builder. If SITELAUNCHR_ENABLED isn't "1" or the source isn't
-  // in the allow list, the build_jobs row is still created (status='queued')
-  // for the admin to see, but no dispatch happens — the row will surface in
-  // the Stuck Builds widget after the threshold elapses.
-  const useSiteLaunchr = shouldRouteToSiteLaunchr(submissionSource);
+  // SiteLaunchr is the canonical builder for NON-sales submissions only.
+  // /sales submissions deliberately bypass this entirely — they were routed
+  // into the Template flow above (held as a prospect in the rep's campaign)
+  // and must NOT dispatch to SL or create a build_jobs row. If SITELAUNCHR
+  // isn't enabled for a non-sales source, the build_jobs row is still created
+  // (status='queued') so the admin sees it and can dispatch manually.
+  if (!isSalesSubmission) {
+    const useSiteLaunchr = shouldRouteToSiteLaunchr(submissionSource);
+    try {
+      console.log("[build] Queue start:", token, "form_type:", formType, "source:", submissionSource);
 
-  // Hard gate: /sales submissions cannot proceed without a customer email
-  // (formData.email). SL's sales-rep gate intentionally ignores contact_email
-  // for is_sales_rep_submission=true payloads — putting the rep's address on
-  // the customer's public site is the bug we're protecting against. If the
-  // rep didn't capture the customer's email, SL would 400 the dispatch
-  // (missing: ["contact.email"]) and the submission would orphan. Skip the
-  // dispatch entirely and surface the row in admin for manual follow-up.
-  const customerEmailMissing =
-    submissionSource === "sales" &&
-    !(typeof formData.email === "string" && (formData.email as string).includes("@"));
+      if (useSiteLaunchr) {
+        let slPayload;
+        try {
+          slPayload = buildSiteLaunchrPayload({
+            token,
+            formType,
+            formData,
+            callbackUrl: process.env.SITELAUNCHR_CALLBACK_URL,
+          });
+        } catch (mapErr) {
+          console.error("[build:sl] Payload build failed:", mapErr);
+          throw mapErr;
+        }
 
-  try {
-    console.log("[build] Queue start:", token, "form_type:", formType, "source:", submissionSource, "customer_email_missing:", customerEmailMissing);
+        const dispatch = await dispatchBuild(slPayload);
+        console.log("[build:sl] Dispatched:", dispatch.build_id, "status:", dispatch.status, "duplicate:", !!dispatch.duplicate);
 
-    if (customerEmailMissing && useSiteLaunchr) {
-      console.warn(`[build:sl] Skipping dispatch — /sales submission without customer email (formData.email). Token: ${token}`);
-      const { error: insertErr } = await supabase
-        .from("build_jobs")
-        .insert({
-          token,
-          form_type: formType,
-          pipeline: "manual",
-          status: "queued",
-          error: "Customer email (formData.email) missing — rep must collect it before SL dispatch. SL's sales-rep gate would reject.",
-          task_id: buildTaskId,
-        });
-      if (insertErr) console.error("[build:sl] manual queue insert failed:", insertErr.message);
-    } else if (useSiteLaunchr) {
-      let slPayload;
-      try {
-        slPayload = buildSiteLaunchrPayload({
-          token,
-          formType,
-          formData,
-          callbackUrl: process.env.SITELAUNCHR_CALLBACK_URL,
-        });
-      } catch (mapErr) {
-        console.error("[build:sl] Payload build failed:", mapErr);
-        throw mapErr;
+        const { error: buildInsertErr } = await supabase
+          .from("build_jobs")
+          .insert({
+            token,
+            form_type: formType,
+            pipeline: "sitelaunchr",
+            status: "queued",
+            external_id: token,
+            sl_build_id: dispatch.build_id,
+            sl_phase: dispatch.status,
+            sl_phase_at: new Date().toISOString(),
+            task_id: buildTaskId,
+          });
+
+        if (buildInsertErr) {
+          console.error("[build:sl] DB insert failed:", buildInsertErr.message);
+        }
+      } else {
+        // SL not enabled for this source — record the build_jobs row anyway
+        // so admin sees the submission queued and can manually dispatch later.
+        const { error: insertErr } = await supabase
+          .from("build_jobs")
+          .insert({ token, form_type: formType, pipeline: "manual", status: "queued", task_id: buildTaskId });
+        if (insertErr) console.error("[build] manual queue insert failed:", insertErr.message);
       }
-
-      const dispatch = await dispatchBuild(slPayload);
-      console.log("[build:sl] Dispatched:", dispatch.build_id, "status:", dispatch.status, "duplicate:", !!dispatch.duplicate);
-
-      const { error: buildInsertErr } = await supabase
-        .from("build_jobs")
-        .insert({
-          token,
-          form_type: formType,
-          pipeline: "sitelaunchr",
-          status: "queued",
-          external_id: token,
-          sl_build_id: dispatch.build_id,
-          sl_phase: dispatch.status,
-          sl_phase_at: new Date().toISOString(),
-          task_id: buildTaskId,
-        });
-
-      if (buildInsertErr) {
-        console.error("[build:sl] DB insert failed:", buildInsertErr.message);
+    } catch (buildErr) {
+      if (buildErr instanceof SiteLaunchrError) {
+        console.error("[build:sl] Dispatch failed:", buildErr.status, buildErr.code, buildErr.message);
+      } else {
+        console.error("[build] Failed to queue build job:", buildErr);
       }
-    } else {
-      // SL not enabled for this source — record the build_jobs row anyway
-      // so admin sees the submission queued and can manually dispatch later.
-      const { error: insertErr } = await supabase
-        .from("build_jobs")
-        .insert({ token, form_type: formType, pipeline: "manual", status: "queued", task_id: buildTaskId });
-      if (insertErr) console.error("[build] manual queue insert failed:", insertErr.message);
-    }
-  } catch (buildErr) {
-    if (buildErr instanceof SiteLaunchrError) {
-      console.error("[build:sl] Dispatch failed:", buildErr.status, buildErr.code, buildErr.message);
-    } else {
-      console.error("[build] Failed to queue build job:", buildErr);
     }
   }
 

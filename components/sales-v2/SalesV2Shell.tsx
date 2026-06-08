@@ -3,7 +3,11 @@
 import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { FirecrawlBranding, FirecrawlBusinessJson, ScrapeResult } from "@/lib/firecrawl";
-import { INDUSTRY_CATEGORIES } from "@/lib/industries";
+
+export interface IndustryOption {
+  slug: string;
+  display_name: string;
+}
 
 type Stage =
   | "ask_existing" // Step 1: existing site Y/N
@@ -11,7 +15,7 @@ type Stage =
   | "scraping" // Loading
   | "review_scrape" // Step 3a: accept/reject each scraped item
   | "manual_entry" // Step 2b: no-site path
-  | "industry" // Common: dropdown + optional "Other" free text
+  | "industry" // Common: dropdown sourced from the Template-flow taxonomy
   | "pages_voice" // Common: standard_pages + personality + look_and_feel
   | "additional_info" // Common: optional notes
   | "submitting"
@@ -63,7 +67,7 @@ interface ManualState {
   differentiators: string;
 }
 
-export function SalesV2Shell({ rep }: { rep: RepProps }) {
+export function SalesV2Shell({ rep, industries }: { rep: RepProps; industries: IndustryOption[] }) {
   const router = useRouter();
   const [stage, setStage] = useState<Stage>("ask_existing");
   const [hasExisting, setHasExisting] = useState<boolean | null>(null);
@@ -78,10 +82,8 @@ export function SalesV2Shell({ rep }: { rep: RepProps }) {
     all_services: "",
     differentiators: "",
   });
-  // industrySlug = one of INDUSTRY_CATEGORIES (or "" if not yet chosen).
-  // industryOther = free text shown only when slug === "other".
+  // industrySlug = one of the tpl_industries slugs (or "" if not yet chosen).
   const [industrySlug, setIndustrySlug] = useState("");
-  const [industryOther, setIndustryOther] = useState("");
   // Sensible defaults — every site needs Home/Services/Contact at minimum, so
   // pre-check them. Rep can untick if a client really doesn't want one.
   const [standardPages, setStandardPages] = useState<string[]>(["Home", "Services", "Contact", "About"]);
@@ -133,7 +135,7 @@ export function SalesV2Shell({ rep }: { rep: RepProps }) {
         manual,
         rep,
         industrySlug,
-        industryOther,
+        industries,
         standardPages,
         personality,
         lookAndFeel,
@@ -163,7 +165,7 @@ export function SalesV2Shell({ rep }: { rep: RepProps }) {
       setSubmitError(err instanceof Error ? err.message : "Submission failed");
       setStage("additional_info");
     }
-  }, [hasExisting, url, review, manual, rep, industrySlug, industryOther, standardPages, personality, lookAndFeel, additionalInfo]);
+  }, [hasExisting, url, review, manual, rep, industrySlug, industries, standardPages, personality, lookAndFeel, additionalInfo]);
 
   // ── Render ────────────────────────────────────────────────────────
   return (
@@ -218,8 +220,7 @@ export function SalesV2Shell({ rep }: { rep: RepProps }) {
           <StageIndustry
             slug={industrySlug}
             setSlug={setIndustrySlug}
-            otherText={industryOther}
-            setOtherText={setIndustryOther}
+            industries={industries}
             onBack={() => setStage(hasExisting ? "review_scrape" : "manual_entry")}
             onNext={() => setStage("pages_voice")}
           />
@@ -637,48 +638,29 @@ function Stage2Manual({
 function StageIndustry({
   slug,
   setSlug,
-  otherText,
-  setOtherText,
+  industries,
   onBack,
   onNext,
 }: {
   slug: string;
   setSlug: (s: string) => void;
-  otherText: string;
-  setOtherText: (s: string) => void;
+  industries: IndustryOption[];
   onBack: () => void;
   onNext: () => void;
 }) {
-  const needsOther = slug === "other";
-  const valid = slug && (!needsOther || otherText.trim().length > 0);
+  const valid = slug.length > 0;
   return (
     <Card>
       <h2 style={h2Style}>Industry / category</h2>
-      <p style={pStyle}>Used to attach industry-appropriate reference sites and imagery. Pick the closest category — Other if nothing fits.</p>
+      <p style={pStyle}>Determines which template the build uses. Pick the closest match — we build a template per industry, so this routes the submission to the right one.</p>
 
       <FieldLabel>Category *</FieldLabel>
       <select value={slug} onChange={(e) => setSlug(e.target.value)} style={inputStyle}>
         <option value="">— Choose one —</option>
-        {INDUSTRY_CATEGORIES.map((c) => (
-          <option key={c.slug} value={c.slug}>{c.label}</option>
+        {industries.map((c) => (
+          <option key={c.slug} value={c.slug}>{c.display_name}</option>
         ))}
       </select>
-
-      {needsOther && (
-        <>
-          <FieldLabel>Describe the industry *</FieldLabel>
-          <input
-            value={otherText}
-            onChange={(e) => setOtherText(e.target.value)}
-            placeholder="e.g. dental, plumber, mortgage broker"
-            style={inputStyle}
-            autoFocus
-          />
-          <p style={{ fontSize: 12, color: "#888886", marginTop: 6 }}>
-            We&apos;ll log this for admin review — recurring ones may earn their own category later.
-          </p>
-        </>
-      )}
 
       <div style={navRow}>
         <button onClick={onBack} style={backBtn}>← Back</button>
@@ -990,23 +972,18 @@ function buildFormData(args: {
   manual: ManualState;
   rep: RepProps;
   industrySlug: string;
-  industryOther: string;
+  industries: IndustryOption[];
   standardPages: string[];
   personality: string;
   lookAndFeel: string;
   additionalInfo: string;
 }): Record<string, unknown> {
-  const { hasExisting, url, review, manual, rep, industrySlug, industryOther, standardPages, personality, lookAndFeel, additionalInfo } = args;
+  const { hasExisting, url, review, manual, rep, industrySlug, industries, standardPages, personality, lookAndFeel, additionalInfo } = args;
 
-  // industry: the SL mapper still requires a non-empty `industry` string.
-  // For dropdown picks we send the human label (e.g. "Health & Wellness");
-  // for Other we send the rep's free text. industry_slug carries the
-  // structured value submit-route uses for reference lookup + Other logging.
-  // inspiration_sites is intentionally absent — submit-route fills it from
-  // the admin-managed reference catalog based on industry_slug.
-  const industryLabel = industrySlug === "other"
-    ? industryOther.trim()
-    : (INDUSTRY_CATEGORIES.find((c) => c.slug === industrySlug)?.label || "");
+  // industry_slug is the canonical tpl_industries slug — it's what the Template
+  // flow matches a template against downstream. industry is the human label
+  // (display_name), carried for display/SL-brief fallback only.
+  const industryLabel = industries.find((c) => c.slug === industrySlug)?.display_name || "";
 
   const fd: Record<string, unknown> = {
     _source: "sales",
@@ -1014,7 +991,6 @@ function buildFormData(args: {
     _form_version: "v2",
     industry: industryLabel,
     industry_slug: industrySlug,
-    ...(industrySlug === "other" ? { industry_other_text: industryOther.trim() } : {}),
     contact_email: rep.email,
     contact_person: rep.first_name + (rep.last_name ? ` ${rep.last_name}` : ""),
     standard_pages: standardPages,

@@ -53,7 +53,7 @@ export function toBuildPayload(r: CanonicalRecord, formType: SlFormType = "quick
     // the cosmetic Google category ("Pest control service") and never matches a
     // template slug; it stays only as a last-resort fallback so the field is
     // never empty.
-    industry: r.industry_slug || r.industry_raw,
+    industry: r.industry_slug || r.industry_raw || "",
   };
   if (r.description) brief.what_you_do = r.description;
   const services = (r.services ?? []).map((s) => s.name).filter((n) => n && n.trim());

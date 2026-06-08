@@ -8,6 +8,7 @@ import { ProspectDrawer } from "./ProspectDrawer";
 export interface CampaignHeader {
   id: string;
   industry_slug: string;
+  name: string | null;
   status: string;
   scraped_count: number;
   qualified_count: number;
@@ -36,7 +37,7 @@ export interface Prospect {
   tpl_mailings?: { status: string; scan_count: number; last_scanned_at: string | null }[];
 }
 
-const STAGES = ["scraped", "enriching", "qualified", "incomplete", "approved", "building", "live", "build_failed"];
+const STAGES = ["scraped", "enriching", "qualified", "incomplete", "approved", "awaiting_template", "building", "live", "build_failed"];
 const PAGE_SIZE = 50;
 
 export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
@@ -218,7 +219,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
     <div>
       <Link href="/admin/templates" style={{ fontSize: 13, color: "#888886", textDecoration: "none" }}>← Template Sites</Link>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "6px 0 18px" }}>
-        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "1.75rem", fontWeight: 700 }}>{campaign.industry_slug}</h1>
+        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "1.75rem", fontWeight: 700 }}>{campaign.industry_slug || campaign.name || "Campaign"}</h1>
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={exportCsv} style={ghostBtn}>Export CSV</button>
           <button onClick={pushCampaign} disabled={actionBusy} style={primaryBtn}>Push qualified → SL</button>

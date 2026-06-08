@@ -46,7 +46,14 @@ function flattenAddress(a?: CanonicalRecord["address"]): string | undefined {
 export function toBuildPayload(r: CanonicalRecord, formType: SlFormType = "quick"): BuildPayload {
   const brief: BuildBrief = {
     business_name: r.business_name,
-    industry: r.industry_raw || r.industry_slug,
+    // SL selects the template by EXACT-matching brief.industry against each
+    // template's industries[] (sitelaunchr-builder select.mjs). So we must emit
+    // SL's controlled-vocabulary slug — discover stamps it as industry_slug
+    // (= the tpl_industries sl_slug) for exactly this handoff. industry_raw is
+    // the cosmetic Google category ("Pest control service") and never matches a
+    // template slug; it stays only as a last-resort fallback so the field is
+    // never empty.
+    industry: r.industry_slug || r.industry_raw,
   };
   if (r.description) brief.what_you_do = r.description;
   const services = (r.services ?? []).map((s) => s.name).filter((n) => n && n.trim());

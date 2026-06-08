@@ -6,7 +6,7 @@ const rec: CanonicalRecord = {
   source_id: "wr-tpl-ChIJ123",
   business_name: "Joe's Pest",
   industry_raw: "Pest control service",
-  industry_slug: "home-services",
+  industry_slug: "pest-control",
   description: "Family-owned pest control",
   services: [
     { name: "Termite Control", description: "..." },
@@ -31,7 +31,7 @@ describe("toBuildPayload", () => {
     expect(p.form_type).toBe("quick");
     expect(p.brief).toMatchObject({
       business_name: "Joe's Pest",
-      industry: "Pest control service",
+      industry: "pest-control",
       what_you_do: "Family-owned pest control",
       all_services: "Termite Control, Rodent Removal",
       address: "1 Main, Mesa, AZ 85201",
@@ -48,10 +48,15 @@ describe("toBuildPayload", () => {
     expect(p.brief).not.toHaveProperty("image_urls");
   });
 
-  it("falls back to industry_slug when industry_raw is absent", () => {
-    const { industry_raw, ...noRaw } = rec;
-    void industry_raw;
-    expect(toBuildPayload(noRaw as CanonicalRecord).brief.industry).toBe("home-services");
+  it("emits the controlled-vocabulary industry_slug, not the raw Google category", () => {
+    // industry_slug must win so SL's exact-match template selection resolves.
+    expect(toBuildPayload(rec).brief.industry).toBe("pest-control");
+  });
+
+  it("falls back to industry_raw only when industry_slug is absent", () => {
+    const { industry_slug, ...noSlug } = rec;
+    void industry_slug;
+    expect(toBuildPayload(noSlug as CanonicalRecord).brief.industry).toBe("Pest control service");
   });
 
   it("omits optional keys when the record lacks them (owner-less is valid)", () => {

@@ -4,6 +4,7 @@
 export const TPL_TASK_IDS = {
   discover: "tpl-discover",
   enrich: "tpl-enrich",
+  enrichBatch: "tpl-enrich-batch",
   deepAudit: "tpl-deep-audit",
   backfill: "tpl-backfill",
   mailCampaign: "tpl-mail-campaign",

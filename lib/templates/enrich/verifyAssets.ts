@@ -5,13 +5,22 @@ export interface VerifyResult {
   contentType: string | null;
 }
 
+// Without an explicit timeout a stalling host pins the check for undici's
+// default ~300s header timeout — at batch scale that eats the task's
+// maxDuration. A slow asset host is as useless as a dead one; cap it.
+const VERIFY_TIMEOUT_MS = 10_000;
+
 /**
  * HEAD-check a single asset URL: must be 2xx AND an image content-type.
  * Auth-walled pages (200 text/html) and dead URLs (4xx/5xx) fail.
  */
 export async function verifyUrl(url: string): Promise<VerifyResult> {
   try {
-    const res = await fetch(url, { method: "HEAD", redirect: "follow" });
+    const res = await fetch(url, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS),
+    });
     const contentType = res.headers.get("content-type");
     const ok = res.status >= 200 && res.status < 300 && !!contentType && contentType.startsWith("image/");
     return { ok, contentType };

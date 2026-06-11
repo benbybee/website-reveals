@@ -58,10 +58,16 @@ export async function POST(
 
   if (config?.mode === "enrich_existing") {
     const stages = (config.stages ?? []).filter((s) => (PROSPECT_STAGES as readonly string[]).includes(s));
+    const effectiveStages = stages.length ? stages : ["scraped", "incomplete"];
+    // "enriching" rides along with "scraped": a prospect only persists there
+    // when a run died mid-flight, and it is semantically still un-enriched.
+    if (effectiveStages.includes("scraped") && !effectiveStages.includes("enriching")) {
+      effectiveStages.push("enriching");
+    }
     await db.from("tpl_campaigns").update({ status: "enriching", updated_at: now }).eq("id", id);
     const handle = await triggerTasks.trigger(TPL_TASK_IDS.enrich, {
       campaignId: id,
-      stages: stages.length ? stages : ["scraped", "incomplete"],
+      stages: effectiveStages,
       includeNoSite: config.includeNoSite !== false,
       preserveStage: true,
     });

@@ -5,8 +5,12 @@
 
 export type RerunMode = "discover_new" | "enrich_existing" | "rescrape";
 
-/** Stages a prospect can occupy. Re-enrich can target any subset of these. */
-export const PROSPECT_STAGES = ["scraped", "incomplete", "qualified", "pushed"] as const;
+/**
+ * Stages a prospect can occupy. Re-enrich can target any subset of these.
+ * "enriching" is transient (a prospect only persists there when a run died
+ * mid-flight) but is targetable so re-runs can sweep up crash orphans.
+ */
+export const PROSPECT_STAGES = ["scraped", "enriching", "incomplete", "qualified", "pushed"] as const;
 export type ProspectStage = (typeof PROSPECT_STAGES)[number];
 
 export interface RerunConfig {
@@ -34,5 +38,21 @@ export interface EnrichPayload {
   stages?: string[];
   includeNoSite?: boolean;
   /** Keep each prospect's existing stage instead of writing qualified/incomplete. */
+  preserveStage?: boolean;
+}
+
+/**
+ * One tpl-enrich-batch child run: a small slice of a campaign's prospects.
+ * The parent resolves the campaign/industry once and partitions the prospect
+ * IDs, so children never re-derive selection state (no drift between what the
+ * parent selected and what a child processes).
+ */
+export interface EnrichBatchPayload {
+  campaignId: string;
+  prospectIds: string[];
+  /** Canonical SL industry slug, resolved by the parent. */
+  industrySlug: string;
+  /** The stage set the parent dispatched against — children skip prospects that moved. */
+  stages: string[];
   preserveStage?: boolean;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { CanonicalRecord } from "@/lib/templates/types";
 import { ProspectDrawer } from "./ProspectDrawer";
@@ -48,27 +48,36 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
   const [stageFilter, setStageFilter] = useState("");
   const [websiteFilter, setWebsiteFilter] = useState("");
   const [missingFilter, setMissingFilter] = useState("");
+  const [dnaFilter, setDnaFilter] = useState("");
+  const [addressFilter, setAddressFilter] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openId, setOpenId] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
+  // Monotonic fetch token: rapid filter/page changes overlap requests, and an
+  // older response landing last would otherwise overwrite the newer one.
+  const fetchSeq = useRef(0);
 
   const load = useCallback(async () => {
+    const seq = ++fetchSeq.current;
     setLoading(true);
     const sp = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
     if (stageFilter) sp.set("stage", stageFilter);
     if (websiteFilter) sp.set("website_status", websiteFilter);
     if (missingFilter) sp.set("missing", missingFilter);
+    if (dnaFilter) sp.set("dna", dnaFilter);
+    if (addressFilter) sp.set("address", addressFilter);
     try {
       const res = await fetch(`/api/templates/campaigns/${campaign.id}/prospects?${sp}`);
       const json = await res.json();
+      if (seq !== fetchSeq.current) return; // a newer request superseded this one
       if (res.ok) {
         setProspects(json.prospects);
         setTotal(json.total);
       }
     } finally {
-      setLoading(false);
+      if (seq === fetchSeq.current) setLoading(false);
     }
-  }, [campaign.id, page, stageFilter, websiteFilter, missingFilter]);
+  }, [campaign.id, page, stageFilter, websiteFilter, missingFilter, dnaFilter, addressFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -182,6 +191,8 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
     if (stageFilter) sp.set("stage", stageFilter);
     if (websiteFilter) sp.set("website_status", websiteFilter);
     if (missingFilter) sp.set("missing", missingFilter);
+    if (dnaFilter) sp.set("dna", dnaFilter);
+    if (addressFilter) sp.set("address", addressFilter);
     const qs = sp.toString();
     window.open(`/api/templates/campaigns/${campaign.id}/export${qs ? `?${qs}` : ""}`, "_blank");
   }
@@ -213,6 +224,18 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
     }
   }
 
+  // Changing any filter must jump back to page 0 — staying on a deep page of a
+  // now-smaller result set renders "No prospects match" even when matches
+  // exist — and must drop the selection: bulk actions on ids the new filter
+  // hides would silently target rows the operator can no longer see.
+  function setFilter(set: (v: string) => void) {
+    return (v: string) => {
+      set(v);
+      setPage(0);
+      setSelected(new Set());
+    };
+  }
+
   const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
 
   return (
@@ -236,9 +259,21 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
       </div>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-        <Select value={stageFilter} onChange={setStageFilter} placeholder="All stages" options={STAGES} />
-        <Select value={websiteFilter} onChange={setWebsiteFilter} placeholder="Any site status" options={["none", "stale", "has_site"]} />
-        <Select value={missingFilter} onChange={setMissingFilter} placeholder="Any completeness" options={["logo_or_photos", "phone", "address", "business_name", "industry_slug"]} />
+        <Select value={stageFilter} onChange={setFilter(setStageFilter)} placeholder="All stages" options={STAGES} />
+        <Select value={websiteFilter} onChange={setFilter(setWebsiteFilter)} placeholder="Any site status" options={["none", "stale", "has_site"]} />
+        <Select value={missingFilter} onChange={setFilter(setMissingFilter)} placeholder="Any completeness" options={["phone", "address", "business_name", "industry_slug"]} />
+        <Select
+          value={dnaFilter}
+          onChange={setFilter(setDnaFilter)}
+          placeholder="Any DNA"
+          options={[{ value: "has", label: "has DNA (logo + color)" }, { value: "missing", label: "missing DNA" }]}
+        />
+        <Select
+          value={addressFilter}
+          onChange={setFilter(setAddressFilter)}
+          placeholder="Any address"
+          options={[{ value: "has", label: "has full address" }, { value: "missing", label: "missing address" }]}
+        />
       </div>
 
       {selected.size > 0 && (
@@ -327,11 +362,16 @@ function Stat({ label, value, color }: { label: string; value: string | number; 
   );
 }
 
-function Select({ value, onChange, placeholder, options }: { value: string; onChange: (v: string) => void; placeholder: string; options: string[] }) {
+type SelectOption = string | { value: string; label: string };
+
+function Select({ value, onChange, placeholder, options }: { value: string; onChange: (v: string) => void; placeholder: string; options: SelectOption[] }) {
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)} style={{ padding: "7px 10px", border: "1.5px solid #d8d6cf", borderRadius: 4, fontSize: 13, fontFamily: "var(--font-sans)", background: "#fff", color: "#555553" }}>
       <option value="">{placeholder}</option>
-      {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      {options.map((o) => {
+        const opt = typeof o === "string" ? { value: o, label: o } : o;
+        return <option key={opt.value} value={opt.value}>{opt.label}</option>;
+      })}
     </select>
   );
 }

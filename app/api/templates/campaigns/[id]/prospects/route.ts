@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
 import { templatesEnabled } from "@/lib/templates/config";
 import { tplDb } from "@/lib/templates/db";
+import { applyProspectFilters } from "@/lib/templates/prospectFilters";
 
 const MAX_PAGE_SIZE = 200;
 
@@ -32,18 +33,8 @@ export async function GET(
     .select("*, tpl_mailings(status, scan_count, last_scanned_at)", { count: "exact" })
     .eq("campaign_id", id);
 
-  const stage = sp.get("stage");
-  if (stage) query = query.eq("stage", stage);
-
-  const websiteStatus = sp.get("website_status");
-  if (websiteStatus) query = query.eq("website_status", websiteStatus);
-
-  const agent = sp.get("agent");
-  if (agent) query = query.eq("agent_id", agent);
-
-  // missing-field filter: completeness jsonb holds a `missing` array of field keys.
-  const missing = sp.get("missing");
-  if (missing) query = query.contains("completeness", { missing: [missing] });
+  // Shared with the CSV export so "export what you're looking at" can't drift.
+  query = applyProspectFilters(query, sp);
 
   query = query.order("created_at", { ascending: false }).range(from, to);
 

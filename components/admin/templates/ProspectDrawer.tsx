@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Prospect } from "./ProspectsTable";
 
-const EDITABLE = ["business_name", "city", "state", "phone", "website", "website_status"] as const;
+// street/zip live only on record.address (no promoted column); the PATCH route
+// mirrors every field edit into the canonical record either way.
+const EDITABLE = ["business_name", "street", "city", "state", "zip", "phone", "website", "website_status"] as const;
+const ADDRESS_ONLY = new Set(["street", "zip"]);
 const STAGES = ["scraped", "qualified", "incomplete", "approved", "building", "live", "build_failed"];
 const CALL_OUTCOMES: { value: string; label: string }[] = [
   { value: "connected", label: "Connected" },
@@ -38,7 +41,13 @@ export function ProspectDrawer({
 }) {
   const [fields, setFields] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
-    if (prospect) for (const k of EDITABLE) init[k] = (prospect[k] as string | null) ?? "";
+    if (prospect) {
+      for (const k of EDITABLE) {
+        init[k] = ADDRESS_ONLY.has(k)
+          ? prospect.record?.address?.[k as "street" | "zip"] ?? ""
+          : ((prospect[k as keyof typeof prospect] as string | null) ?? "");
+      }
+    }
     return init;
   });
   const [stage, setStage] = useState(prospect?.stage ?? "scraped");

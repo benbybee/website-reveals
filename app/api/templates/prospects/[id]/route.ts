@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
 import { templatesEnabled } from "@/lib/templates/config";
 import { tplDb } from "@/lib/templates/db";
-
-const EDITABLE_SCALARS = ["business_name", "city", "state", "phone", "website", "website_status"] as const;
+import {
+  mergeRecordEdit,
+  PROMOTED_COLUMNS,
+  type EditableField,
+} from "@/lib/templates/prospectEdit";
 
 interface PatchBody {
   stage?: string;
   agent_id?: string | null;
-  fields?: Partial<Record<(typeof EDITABLE_SCALARS)[number], string>>;
+  fields?: Partial<Record<EditableField, string>>;
   record?: Record<string, unknown>;
 }
 
@@ -54,13 +57,19 @@ export async function PATCH(
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
   if (body.fields) {
-    for (const key of EDITABLE_SCALARS) {
+    for (const key of PROMOTED_COLUMNS) {
       if (typeof body.fields[key] === "string") update[key] = body.fields[key];
     }
   }
-  if (body.record && typeof body.record === "object") {
-    update.record = { ...((existing.record as Record<string, unknown>) || {}), ...body.record };
-  }
+  // Mirror every edit into the canonical record — it feeds scoring, the SL
+  // push, the mail send, and the list/export filters; updating only the
+  // promoted columns would silently diverge all of them.
+  const mergedRecord = mergeRecordEdit(
+    existing.record as Record<string, unknown> | null,
+    body.fields,
+    body.record && typeof body.record === "object" ? body.record : null,
+  );
+  if (mergedRecord) update.record = mergedRecord;
   if (typeof body.stage === "string") update.stage = body.stage;
   if (body.agent_id !== undefined) update.agent_id = body.agent_id;
 

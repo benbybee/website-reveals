@@ -8,6 +8,7 @@
 - [How to use this brain](./how-to-use-this-brain.md) — for humans and agents.
 - [Current state](./current-state.md) — what is true now (subsystems, deploy, status).
 - [Handoff / next steps](./handoff.md) — what to do next, open risks.
+- [Migration feedback](./migration-feedback.md) — lessons from this (first real) bootstrap, to feed the SiteLaunchr/Dispatchr/Relay migrations.
 
 ## Maps & registers
 - [Subsystem map](./subsystem-map.md) — the 11 subsystems and their relationships.

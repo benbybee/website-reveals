@@ -1,19 +1,6 @@
-// Pure, DB-free helpers for the /join lookup. The fuzzy SQL lives in
-// tpl_find_prospects; here we only normalize inputs and shape the result.
-
-export interface FindRow {
-  id: string;
-  business_name: string | null;
-  city: string | null;
-  state: string | null;
-  preview_url: string | null;
-  sim: number;
-}
-
-export type MatchResult =
-  | { kind: "none" }
-  | { kind: "one"; match: FindRow }
-  | { kind: "many"; matches: FindRow[] };
+// Pure, DB-free input normalizers for the /join lookup. The matching itself
+// lives in SQL: tpl_search_prospects for the name typeahead, and an exact zip
+// compare in the confirm route.
 
 /** First 5 digits, or "" if the input isn't a clean 5-digit US ZIP. */
 export function normalizeZip(raw: string): string {
@@ -21,14 +8,7 @@ export function normalizeZip(raw: string): string {
   return digits.length >= 5 ? digits.slice(0, 5) : "";
 }
 
-/** Trimmed, single-spaced business name. */
+/** Trimmed, single-spaced search/business name. */
 export function normalizeName(raw: string): string {
   return (raw ?? "").trim().replace(/\s+/g, " ");
-}
-
-/** none / one / many from the search rows (already zip+name filtered by SQL). */
-export function classifyMatches(rows: FindRow[]): MatchResult {
-  if (rows.length === 0) return { kind: "none" };
-  if (rows.length === 1) return { kind: "one", match: rows[0] };
-  return { kind: "many", matches: rows };
 }

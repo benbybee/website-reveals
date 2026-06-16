@@ -1,23 +1,39 @@
+import type { Viewport } from "next";
 import { notFound } from "next/navigation";
+import { Bricolage_Grotesque } from "next/font/google";
 import { templatesEnabled } from "@/lib/templates/config";
 import { FindYourSite } from "@/components/templates/FindYourSite";
 
+// Distinctive display face for the headline — not a default sans.
+const display = Bricolage_Grotesque({
+  subsets: ["latin"],
+  variable: "--font-display",
+  weight: ["400", "600", "700", "800"],
+  display: "swap",
+});
+
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Find your website" };
+
+export const metadata = {
+  title: "Claim your free website",
+  description: "We already built a website for your business. Find it, then claim it — free.",
+};
+
+// Mobile-first: most visitors arrive by scanning the postcard QR on a phone.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#05070E",
+};
 
 export default function JoinPage() {
   if (!templatesEnabled()) notFound();
+  // The dark surface lives on the wrapper so there's no light flash before the
+  // client experience hydrates; FindYourSite paints the atmosphere + flow.
   return (
-    <main style={{ minHeight: "100vh", background: "#faf9f5", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ width: "100%", maxWidth: 460 }}>
-        <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "1.75rem", fontWeight: 700, marginBottom: 8 }}>
-          Find your website
-        </h1>
-        <p style={{ fontSize: 14, color: "#555553", marginBottom: 20 }}>
-          Enter your business name and the ZIP code on your postcard to see the site we built for you.
-        </p>
-        <FindYourSite />
-      </div>
-    </main>
+    <div className={display.variable} style={{ background: "#05070E", minHeight: "100dvh" }}>
+      <FindYourSite />
+    </div>
   );
 }

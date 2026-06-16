@@ -23,24 +23,18 @@ export default async function SalesPage() {
   if (!user) redirect("/admin/login");
 
   const db = tplDb();
-  // Embed mailings so the board can surface QR-scan activity: 90-95% of sales
-  // come from prospects who scanned their mailed postcard, so reps need to see
-  // who scanned vs. not. A prospect may have multiple mailings — we sum scan_count
-  // and take the most recent last_scanned_at across them.
+  // Surface looked-up / opened engagement straight from the rollup counters on
+  // tpl_prospects (lookup_count/last_looked_up_at when someone looks the business
+  // up on /join, click_count/last_clicked_at when they open the preview site).
+  // These replace the old per-mailing QR-scan signal.
   const { data } = await db
     .from("tpl_prospects")
-    .select("id, business_name, city, state, phone, website, stage, agent_id, record, call_count, last_called_at, tpl_mailings(scan_count, last_scanned_at)")
+    .select("id, business_name, city, state, phone, website, stage, agent_id, record, call_count, last_called_at, lookup_count, last_looked_up_at, click_count, last_clicked_at")
     .in("stage", BOARD_STAGES)
     .order("updated_at", { ascending: false })
     .limit(500);
 
   const prospects: SalesProspect[] = ((data ?? []) as Record<string, unknown>[]).map((p) => {
-    const mailings = (p.tpl_mailings as { scan_count?: number; last_scanned_at?: string | null }[] | null) ?? [];
-    const scanCount = mailings.reduce((sum, m) => sum + (m.scan_count ?? 0), 0);
-    const lastScannedAt = mailings.reduce<string | null>((latest, m) => {
-      if (!m.last_scanned_at) return latest;
-      return !latest || m.last_scanned_at > latest ? m.last_scanned_at : latest;
-    }, null);
     return {
       id: p.id as string,
       business_name: (p.business_name as string) ?? null,
@@ -51,8 +45,10 @@ export default async function SalesPage() {
       stage: p.stage as string,
       agent_id: (p.agent_id as string) ?? null,
       preview_url: ((p.record as { preview_url?: string } | null)?.preview_url) ?? null,
-      scan_count: scanCount,
-      last_scanned_at: lastScannedAt,
+      lookup_count: (p.lookup_count as number) ?? 0,
+      last_looked_up_at: (p.last_looked_up_at as string) ?? null,
+      click_count: (p.click_count as number) ?? 0,
+      last_clicked_at: (p.last_clicked_at as string) ?? null,
       call_count: (p.call_count as number) ?? 0,
       last_called_at: (p.last_called_at as string) ?? null,
     };

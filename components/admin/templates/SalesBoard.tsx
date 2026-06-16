@@ -15,8 +15,10 @@ export interface SalesProspect {
   stage: string;
   agent_id: string | null;
   preview_url: string | null;
-  scan_count: number;
-  last_scanned_at: string | null;
+  lookup_count: number;
+  last_looked_up_at: string | null;
+  click_count: number;
+  last_clicked_at: string | null;
   call_count: number;
   last_called_at: string | null;
 }
@@ -24,18 +26,18 @@ export interface SalesProspect {
 export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesProspect[]; userEmail: string; stages: string[] }) {
   const router = useRouter();
   const [mineOnly, setMineOnly] = useState(false);
-  const [scannedFirst, setScannedFirst] = useState(false);
+  const [engagedFirst, setEngagedFirst] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [convertFor, setConvertFor] = useState<SalesProspect | null>(null);
   const [callFor, setCallFor] = useState<SalesProspect | null>(null);
 
   const filtered = mineOnly ? prospects.filter((p) => p.agent_id === userEmail) : prospects;
-  // "Scanned first" surfaces the prospects most likely to convert (90-95% of
-  // sales come from scanners). Sort by scan_count desc, then most-recent scan.
-  const visible = scannedFirst
+  // "Engaged first" surfaces the prospects most likely to convert — those who
+  // opened their preview site. Sort by click_count desc, then most-recent click.
+  const visible = engagedFirst
     ? [...filtered].sort((a, b) => {
-        if (b.scan_count !== a.scan_count) return b.scan_count - a.scan_count;
-        return (b.last_scanned_at ?? "").localeCompare(a.last_scanned_at ?? "");
+        if (b.click_count !== a.click_count) return b.click_count - a.click_count;
+        return (b.last_clicked_at ?? "").localeCompare(a.last_clicked_at ?? "");
       })
     : filtered;
 
@@ -59,8 +61,8 @@ export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesP
         <Link href="/admin/templates" style={{ fontSize: 13, color: "#888886", textDecoration: "none" }}>← Template Sites</Link>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#555553" }}>
-            <input type="checkbox" checked={scannedFirst} onChange={(e) => setScannedFirst(e.target.checked)} />
-            Scanned first
+            <input type="checkbox" checked={engagedFirst} onChange={(e) => setEngagedFirst(e.target.checked)} />
+            Engaged first
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#555553" }}>
             <input type="checkbox" checked={mineOnly} onChange={(e) => setMineOnly(e.target.checked)} />
@@ -77,7 +79,8 @@ export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesP
               <th style={th}>Business</th>
               <th style={th}>Location</th>
               <th style={th}>Phone</th>
-              <th style={{ ...th, width: 70 }}>Scan</th>
+              <th style={{ ...th, width: 80 }}>Looked up</th>
+              <th style={{ ...th, width: 70 }}>Opened</th>
               <th style={{ ...th, width: 70 }}>Calls</th>
               <th style={th}>Preview</th>
               <th style={th}>Agent</th>
@@ -86,7 +89,7 @@ export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesP
             </tr>
           </thead>
           <tbody>
-            {visible.length === 0 && <tr><td colSpan={9} style={{ ...td, textAlign: "center", color: "#888886", padding: 28 }}>No prospects in the sales funnel.</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={10} style={{ ...td, textAlign: "center", color: "#888886", padding: 28 }}>No prospects in the sales funnel.</td></tr>}
             {visible.map((p) => (
               <tr key={p.id} style={{ borderTop: "1px solid #f0eeea" }}>
                 <td style={td}><span style={{ fontWeight: 600, color: "#111110" }}>{p.business_name || "—"}</span></td>
@@ -94,7 +97,8 @@ export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesP
                 <td style={td}>
                   {p.phone ? <a href={`tel:${p.phone}`} style={{ color: "#ff3d00", textDecoration: "none", fontFamily: "var(--font-mono)", fontSize: 12 }}>{p.phone}</a> : <span style={{ color: "#bbb" }}>—</span>}
                 </td>
-                <td style={{ ...td, textAlign: "center" }}><ScanBadge count={p.scan_count} lastScannedAt={p.last_scanned_at} /></td>
+                <td style={{ ...td, textAlign: "center" }}><EngageBadge count={p.lookup_count} at={p.last_looked_up_at} glyph="🔍" tone="muted" title="Looked up" /></td>
+                <td style={{ ...td, textAlign: "center" }}><EngageBadge count={p.click_count} at={p.last_clicked_at} glyph="▶" tone="green" title="Opened site" /></td>
                 <td style={{ ...td, textAlign: "center" }}><CallBadge count={p.call_count} lastCalledAt={p.last_called_at} /></td>
                 <td style={td}>
                   {p.preview_url ? <a href={p.preview_url} target="_blank" rel="noreferrer" style={{ color: "#0a4a7a", fontSize: 12 }}>view →</a> : <span style={{ color: "#bbb", fontSize: 12 }}>—</span>}
@@ -149,17 +153,16 @@ export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesP
   );
 }
 
-/** Green scan pill when a prospect scanned their postcard — the strongest buy
- * signal on the board. Grey dash when no scan recorded. */
-function ScanBadge({ count, lastScannedAt }: { count: number; lastScannedAt: string | null }) {
-  if (count <= 0) return <span style={{ color: "#c9c7c0", fontSize: 12 }} title="No scan recorded">—</span>;
-  const when = lastScannedAt ? new Date(lastScannedAt).toLocaleDateString() : "";
+function EngageBadge({ count, at, glyph, tone, title }: { count: number; at: string | null; glyph: string; tone: "green" | "muted"; title: string }) {
+  if (count <= 0) return <span style={{ color: "#c9c7c0", fontSize: 12 }} title={`No ${title.toLowerCase()} yet`}>—</span>;
+  const when = at ? new Date(at).toLocaleDateString() : "";
+  const c = tone === "green"
+    ? { color: "#0a7a3d", background: "#e7f5ec", border: "1px solid #b7e0c4" }
+    : { color: "#555553", background: "#f0eeea", border: "1px solid #d8d6cf" };
   return (
-    <span
-      title={`Scanned ${count}×${when ? ` — last ${when}` : ""}`}
-      style={{ display: "inline-block", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "#0a7a3d", background: "#e7f5ec", border: "1px solid #b7e0c4", borderRadius: 4, padding: "2px 6px" }}
-    >
-      ▣ {count}
+    <span title={`${title} ${count}×${when ? ` — last ${when}` : ""}`}
+      style={{ display: "inline-block", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, borderRadius: 4, padding: "2px 6px", ...c }}>
+      {glyph} {count}
     </span>
   );
 }

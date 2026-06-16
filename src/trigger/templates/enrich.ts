@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { tplDb } from "@/lib/templates/db";
 import { runActor, recordCostFromRun } from "@/lib/templates/apify/client";
 import { assembleRecord } from "@/lib/templates/enrich";
+import { promotedColumns } from "@/lib/templates/promotedColumns";
 import {
   ENRICH_BATCH_SIZE,
   BATCH_DISPATCH_LIMIT,
@@ -352,12 +353,7 @@ export const tplEnrichBatchTask = task({
           .from("tpl_prospects")
           .update({
             record,
-            business_name: record.business_name || null,
-            city: record.address?.city || null,
-            state: record.address?.state || null,
-            phone: record.phone || null,
-            website: record.website || null,
-            website_status: record.website_status ?? "none",
+            ...promotedColumns(record),
             confidence: score.confidence,
             completeness: score,
             stage,

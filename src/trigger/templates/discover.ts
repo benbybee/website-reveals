@@ -2,6 +2,7 @@ import { task, tasks, logger } from "@trigger.dev/sdk/v3";
 import { tplDb } from "@/lib/templates/db";
 import { runActor, recordCostFromRun } from "@/lib/templates/apify/client";
 import { mapPlaceToRecord, type PlaceItem } from "@/lib/templates/apify/places";
+import { promotedColumns } from "@/lib/templates/promotedColumns";
 import { toStateName } from "@/lib/templates/normalize/state";
 import { TPL_TASK_IDS } from "@/lib/templates/trigger/ids";
 import type { DiscoverPayload } from "@/lib/templates/rerun";
@@ -114,12 +115,7 @@ export const tplDiscoverTask = task({
         const fields = {
           place_id: raw.placeId ?? null,
           record: stamped,
-          business_name: record.business_name ?? null,
-          city: record.address?.city ?? null,
-          state: record.address?.state ?? null,
-          phone: record.phone ?? null,
-          website: record.website ?? null,
-          website_status: record.website_status ?? "none",
+          ...promotedColumns(record),
           updated_at: new Date().toISOString(),
         };
 

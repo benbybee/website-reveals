@@ -282,7 +282,7 @@ async function mailViaClick2Mail(
     // 2) Build the address-list CSV (header row + one row per claimed prospect).
     const headers = ["name", "address1", "city", "state", "zip", "business_name", "preview_url", "qr_url"];
     const lines = [headers.join(",")];
-    for (const { prospect: p, qrToken } of claimed) {
+    for (const { prospect: p } of claimed) {
       const a = p.address!;
       lines.push(
         [

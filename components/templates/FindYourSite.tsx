@@ -223,10 +223,6 @@ export function FindYourSite() {
       <div className="fys-grain" aria-hidden />
 
       <main className="fys-stage">
-        <div className="fys-brand" data-enter>
-          <span className="fys-dot" /> Website Reveals
-        </div>
-
         {/* SEARCH */}
         {phase === "search" && (
           <div className="fys-hero">
@@ -409,9 +405,6 @@ const CSS = `
 .fys-grain{position:absolute;inset:0;z-index:1;pointer-events:none;opacity:.06;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 .fys-stage{position:relative;z-index:2;width:100%;max-width:460px;display:flex;flex-direction:column}
-
-.fys-brand{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;letter-spacing:.02em;color:var(--lo);margin-bottom:clamp(28px,9vh,68px)}
-.fys-dot{width:8px;height:8px;border-radius:50%;background:var(--grad);box-shadow:0 0 12px #34E2A0}
 
 .fys-eyebrow{font-size:12.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#7FE8C8;margin:0 0 14px}
 .fys-h1{font-family:var(--font-display),var(--font-sans),sans-serif;font-weight:800;

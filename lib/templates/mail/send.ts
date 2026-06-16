@@ -10,7 +10,7 @@ import type { PostcardDesign, ReturnAddress } from "@/lib/templates/mail/types";
 import { toLobAddress, returnToLobAddress } from "@/lib/templates/mail/types";
 import { verifyUsAddress, createPostcard } from "@/lib/templates/mail/lob";
 import { uploadDocument, createAddressList, createJob, submitJob } from "@/lib/templates/mail/click2mail";
-import { generateQrToken, qrTrackingUrl } from "@/lib/templates/mail/qr";
+import { generateQrToken, joinUrl } from "@/lib/templates/mail/qr";
 import { lobEnabled, c2mEnabled, type MailProvider } from "@/lib/templates/config";
 
 // Per-card cost estimate (USD) for the spend-confirm gate + ledger. Lob's
@@ -194,9 +194,9 @@ export async function mailCampaign(
         merge_variables: {
           business_name: p.business_name ?? "",
           preview_url: p.preview_url ?? "",
-          // Tracked redirect — scans are logged + attributed before forwarding to
-          // the preview. The HTML back-template should encode qr_url as the QR.
-          qr_url: qrTrackingUrl(qrToken),
+          // Single static /join lookup printed as one shared QR on every card.
+          // The HTML back-template should encode qr_url as the QR.
+          qr_url: joinUrl(),
         },
         idempotency_key: `tpl-mail-${p.id}`,
       });
@@ -293,7 +293,7 @@ async function mailViaClick2Mail(
           a.zip,
           p.business_name ?? "",
           p.preview_url ?? "",
-          qrTrackingUrl(qrToken),
+          joinUrl(),
         ]
           .map(csvCell)
           .join(","),

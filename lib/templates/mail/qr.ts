@@ -19,3 +19,8 @@ export function qrBaseUrl(): string {
 export function qrTrackingUrl(token: string): string {
   return `${qrBaseUrl()}/r/${token}`;
 }
+
+/** Single static lookup URL printed (as one shared QR) on every postcard. */
+export function joinUrl(): string {
+  return `${qrBaseUrl()}/join`;
+}

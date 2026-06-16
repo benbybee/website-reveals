@@ -1,6 +1,6 @@
 # 0006 — Reconciliation backstop for missed wr-template build callbacks
 
-- Status: accepted (2026-06-16) — SL confirmed + built the read path; WR reconcile cron built. Implementation lands on coordinated deploy; gap G-C4-2 stays open until both sides are deployed and Zap is recovered.
+- Status: accepted + **implemented & verified end-to-end (2026-06-16)**. SL shipped `GET /api/builds/:build_id` to prod; WR shipped the `reconcile-template-builds` cron. Proven on the real stranded build (Zap / `3c78c4bc`): the cron pulled `status=succeeded` + `site_url` from SL and recovered the lead to `live` (`{recovered:1}`), now searchable + claimable in `/join`. Gap G-C4-2 **closed**.
 - Date: 2026-06-16
 - Deciders: WR maintainer, operator; SiteLaunchr maintainer (cross-repo half)
 - Tier impact: none

@@ -31,7 +31,7 @@ Inbound HMAC verification, same scheme as outbound, **plus a freshness window**:
 ## Failure / retry / escalation
 - A stale/bad-signature callback is rejected (not applied).
 - An unrecognized status is acked and ignored rather than applied.
-- Retry is SL's responsibility (it owns delivery). WR is idempotent on `(build_id, status)` mapping.
+- Callbacks are the **best-effort fast path**; SL owns delivery and WR is idempotent on `(build_id, status)` mapping. But delivery is **not** guaranteed — a dropped *terminal* callback strands the lead (proven 2026-06-16). The durable backstop is a WR reconcile cron + an SL read path for terminal build state — see [ADR 0006](../decisions/0006-template-callback-reconciliation.md) (supersedes "retry is solely SL's responsibility" for the `wr-template` flow). Until shipped, recovery is manual ([gap matrix](../gap-matrix.md) G-C4-2).
 
 ## Source files
 - `app/api/sl-callback/route.ts`, `app/api/templates/sl-callback/route.ts`
@@ -44,3 +44,4 @@ ADR → `/cross-repo-review` → coordinated deploy. The cost-reporting extensio
 
 ## Known gaps
 - Real cost attribution is blocked on SL emitting `cost_usd`/`usage`; until then `build_jobs.cost_usd` is a clamped duration estimate (flat ~$8.80 on long builds). ([gap matrix](../gap-matrix.md) G-C4)
+- No reconciliation for the `wr-template` flow: a dropped terminal callback leaves `tpl_prospects` stuck in `building` forever, and WR can't pull `site_url` from SL. ([gap matrix](../gap-matrix.md) G-C4-2 · fix: [ADR 0006](../decisions/0006-template-callback-reconciliation.md))

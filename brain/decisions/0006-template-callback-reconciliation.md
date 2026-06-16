@@ -25,7 +25,7 @@ Net effect: a successfully built, billable site silently fails to surface in the
 ## Decision
 Treat SL callbacks as the **fast path, not the only path**, and add a **reconciliation backstop** for the wr-template flow. This is a coordinated, additive, two-repo change:
 
-1. **SL side (C4/C2 addition) — a pull path for terminal build state.** SL exposes a read returning `{ status, site_url, error_message }` for a build, keyed by `build_id` (preferred) or `external_id`:
+1. **SL side (C4/C2 addition) — a pull path for terminal build state** (full SL-facing spec: [docs/integrations/sl-build-read-path.md](../../docs/integrations/sl-build-read-path.md)). SL exposes a read returning `{ status, site_url, error_message }` for a build, keyed by `build_id` (preferred) or `external_id`:
    - **(a)** `GET /api/builds/:build_id` (or `?external_id=…`) — **preferred**: an explicit read seam, reusable, doesn't overload the dispatch write; or
    - **(b)** include `site_url` in the existing `/api/builds` dedup response when `status` is terminal.
 2. **WR side — a template reconcile cron** `app/api/cron/reconcile-template-builds/route.ts` (mirrors `reconcile-sl-builds`, guarded by `CRON_SECRET`): every ~30 min, find `tpl_prospects` where `stage='building'` and `updated_at` is older than a threshold (≥ SL's 18-min target + margin, e.g. 25 min); call the SL read path by `sl_build_id`; then apply exactly what the callback would have, via the same `slStatusToStage` mapping — `succeeded` → write `preview_url` + flip `live`; `failed|canceled` → `build_failed` + `build_error`. Idempotent; safe to run repeatedly.

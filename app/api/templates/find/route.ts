@@ -13,6 +13,13 @@ const MAX_PER_WINDOW = 20;
 
 function rateLimited(ip: string): boolean {
   const now = Date.now();
+  // Sweep expired entries so the Map can't grow unbounded across a warm function
+  // instance handling many distinct IPs during a campaign mailing.
+  if (HITS.size > 512) {
+    for (const [key, val] of HITS) {
+      if (now > val.resetAt) HITS.delete(key);
+    }
+  }
   const e = HITS.get(ip);
   if (!e || now > e.resetAt) {
     HITS.set(ip, { count: 1, resetAt: now + WINDOW_MS });

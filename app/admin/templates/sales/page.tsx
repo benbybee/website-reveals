@@ -29,7 +29,7 @@ export default async function SalesPage() {
   // These replace the old per-mailing QR-scan signal.
   const { data } = await db
     .from("tpl_prospects")
-    .select("id, business_name, city, state, phone, website, stage, agent_id, record, call_count, last_called_at, lookup_count, last_looked_up_at, click_count, last_clicked_at")
+    .select("id, business_name, city, state, phone, website, stage, agent_id, preview_url, call_count, last_called_at, lookup_count, last_looked_up_at, click_count, last_clicked_at")
     .in("stage", BOARD_STAGES)
     .order("updated_at", { ascending: false })
     .limit(500);
@@ -44,7 +44,7 @@ export default async function SalesPage() {
       website: (p.website as string) ?? null,
       stage: p.stage as string,
       agent_id: (p.agent_id as string) ?? null,
-      preview_url: ((p.record as { preview_url?: string } | null)?.preview_url) ?? null,
+      preview_url: (p.preview_url as string) ?? null,
       lookup_count: (p.lookup_count as number) ?? 0,
       last_looked_up_at: (p.last_looked_up_at as string) ?? null,
       click_count: (p.click_count as number) ?? 0,

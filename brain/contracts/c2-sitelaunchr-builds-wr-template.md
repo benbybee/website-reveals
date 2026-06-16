@@ -44,6 +44,21 @@ From [`lib/templates/sl/toBuildPayload.ts`](../../lib/templates/sl/toBuildPayloa
 - Two transports: `post` (HMAC POST per build) and `table` (write payload set to `tpl_sl_batches` for SL to read — dry-run-safe default until creds provisioned).
 - 429 honored via `retry-after` up to `maxRetries=3`; per-build failures isolated, not thrown.
 
+## Supported industries (template vocabulary — SL/sitelaunchr-builder owned)
+`brief.industry` selects a full-site template; the worker normalizes space↔hyphen and case. Snapshot confirmed by SL 2026-06-16 (7 templates) — **SL-owned, may drift; re-confirm before relying on it as a hard gate.** A build for an industry outside this union fails at template selection.
+
+| Template | Accepted industries |
+|---|---|
+| `concrete-bold` | concrete, concrete contractor, construction, masonry, paving, foundations, general contractor |
+| `electric-editorial-bolt` | electrical, electrician |
+| `house-cleaning-fresh` | house cleaning, maid service, residential cleaning, janitorial |
+| `hvac-precision-comfort` | hvac, air-conditioning, heating-cooling |
+| `landscaping-leaf-teal` | landscaping, lawn care, lawn maintenance, hardscaping, irrigation, tree service |
+| `pest-control-bold` | pest-control, exterminator, home-services |
+| `pool-service-violet-glow` | pool service, pool cleaning, pool maintenance, spa service |
+
+Adding an industry = add a template dir under sitelaunchr-builder `templates/<slug>/` with an `industries[]` array (syncs to SL's `site_templates`); no SL code change. A WR pre-dispatch gate against this union would catch truly-unsupported industries (not in any template) but **would not** catch a supported-industry build that fails downstream (see worker gap below).
+
 ## Failure / retry / escalation
 - Per-build `BuildResult{ok,status,build_id,duplicate,error}` — one bad prospect never aborts the batch.
 - 429 retried up to 3×; other non-2xx returned as `ok:false` and surfaced in the push result.
@@ -60,3 +75,5 @@ ADR → `/cross-repo-review` → coordinated deploy. The `industry` slug vocabul
 ## Known gaps
 - No automated SL-side conformance probe; conformance is the local validator + SL's `.strict()` reject. ([gap matrix](../gap-matrix.md) G-C2)
 - Failed builds have no escalation/dead-letter. (G-C2b)
+- **Worker fill-schema size limit (sitelaunchr-builder):** rich multi-page templates can exceed Gemini's constrained-decoding state limit at the LLM slot-fill step → `AI_APICallError 400 … too many states`, non-retryable. Observed 2026-06-16 on `hvac-precision-comfort` (build `25e6ab97`, REIC Rentals). Worker-side bug; SL is fixing with the Builder. The industry IS supported — this is a downstream render failure, not a vocabulary miss. (G-C2c)
+- **Failure diagnostics:** SL now synthesizes a human-readable `error_message` when the worker posts `failed` with a null reason (SL PR #7, 2026-06-16) — flows to the callback + `GET /api/builds/:id`. Pre-fix failures (e.g. REIC) keep their null `error_message`.

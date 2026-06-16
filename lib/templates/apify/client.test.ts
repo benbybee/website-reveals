@@ -30,8 +30,12 @@ describe("runActor", () => {
     const input = { searchStringsArray: ["pest control Gilbert AZ"], maxCrawledPlaces: 3 };
     const res = await runActor("compass/crawler-google-places", input);
 
-    // First call starts the async run (not the old run-sync endpoint).
-    const [startUrl, startOpts] = fetchMock.mock.calls[0];
+    // First call starts the async run (not the old run-sync endpoint). The mock
+    // impl is typed with one param, so cast the recorded call to read the opts.
+    const [startUrl, startOpts] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      { method: string; headers: Record<string, string>; body: string },
+    ];
     expect(startUrl).toContain("/acts/compass~crawler-google-places/runs");
     expect(startUrl).toContain("token=tok123");
     expect(startOpts.method).toBe("POST");

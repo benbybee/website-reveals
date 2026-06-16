@@ -7,27 +7,37 @@ afterEach(() => {
 });
 
 describe("runActor", () => {
-  it("POSTs to the run-sync-get-dataset-items endpoint with token + body", async () => {
+  it("starts an async run and returns the dataset items + authoritative run id", async () => {
     process.env.APIFY_TOKEN = "tok123";
     const items = [{ a: 1 }, { a: 2 }];
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(items), {
-        status: 201,
-        headers: { "content-type": "application/json", "x-apify-run-id": "run-abc" },
-      }),
-    );
+    // runActor starts the run async (POST /acts/{id}/runs) to get an authoritative
+    // run id, then fetches items from the run's dataset. Mock both calls by URL.
+    const fetchMock = vi.fn((url: string) => {
+      if (typeof url === "string" && url.includes("/runs?")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ data: { id: "run-abc", status: "SUCCEEDED", defaultDatasetId: "ds-1" } }),
+            { status: 201, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify(items), { status: 200, headers: { "content-type": "application/json" } }),
+      );
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     const input = { searchStringsArray: ["pest control Gilbert AZ"], maxCrawledPlaces: 3 };
     const res = await runActor("compass/crawler-google-places", input);
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, opts] = fetchMock.mock.calls[0];
-    expect(url).toContain("/acts/compass~crawler-google-places/run-sync-get-dataset-items");
-    expect(url).toContain("token=tok123");
-    expect(opts.method).toBe("POST");
-    expect(opts.headers["content-type"]).toBe("application/json");
-    expect(opts.body).toBe(JSON.stringify(input));
+    // First call starts the async run (not the old run-sync endpoint).
+    const [startUrl, startOpts] = fetchMock.mock.calls[0];
+    expect(startUrl).toContain("/acts/compass~crawler-google-places/runs");
+    expect(startUrl).toContain("token=tok123");
+    expect(startOpts.method).toBe("POST");
+    expect(startOpts.headers["content-type"]).toBe("application/json");
+    expect(startOpts.body).toBe(JSON.stringify(input));
+    // Items come from the run's dataset; run id is read off the run object.
     expect(res.items).toEqual(items);
     expect(res.runId).toBe("run-abc");
   });

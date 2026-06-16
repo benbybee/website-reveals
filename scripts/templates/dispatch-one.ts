@@ -39,9 +39,13 @@ const env = Object.fromEntries(
 async function main() {
   const args = process.argv.slice(2);
   const send = args.includes("--send");
+  // --retry adds `retry: true`, which re-arms a terminally `failed` build in
+  // place (same build_id) instead of getting the deduped {duplicate, failed}.
+  // Use it to re-dispatch a build_failed lead after the underlying bug is fixed.
+  const retry = args.includes("--retry");
   const sourceId = args.find((a) => !a.startsWith("--"));
   if (!sourceId) {
-    console.error("Usage: npx tsx scripts/templates/dispatch-one.ts <source_id> [--send]");
+    console.error("Usage: npx tsx scripts/templates/dispatch-one.ts <source_id> [--send] [--retry]");
     process.exit(1);
   }
 
@@ -111,11 +115,12 @@ async function main() {
 
   // Sign the exact bytes we send — same scheme as lib/sitelaunchr.ts signPayload
   // and lib/templates/sl/adapter.ts (HMAC-SHA256 of `${timestamp}.${rawBody}`).
-  const rawBody = JSON.stringify(payload);
+  // With --retry, send `retry: true` to re-arm a terminally-failed build in place.
+  const rawBody = JSON.stringify(retry ? { ...payload, retry: true } : payload);
   const timestamp = String(Math.floor(Date.now() / 1000));
   const signature = createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
 
-  console.log(`\nDispatching to ${url} as source "wr-template"...`);
+  console.log(`\nDispatching to ${url} as source "wr-template"${retry ? " (retry: true — re-arm failed build)" : ""}...`);
   const res = await fetch(url, {
     method: "POST",
     headers: {

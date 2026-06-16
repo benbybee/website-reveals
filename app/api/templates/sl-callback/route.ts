@@ -83,9 +83,12 @@ export async function POST(req: NextRequest) {
     record.build_error = String(body.error_message).slice(0, 500);
   }
 
+  const patch: Record<string, unknown> = { stage, record, updated_at: new Date().toISOString() };
+  if (body.build_id) patch.sl_build_id = body.build_id;
+  if (body.site_url) patch.preview_url = body.site_url;
   const { error: updErr } = await supabase
     .from("tpl_prospects")
-    .update({ stage, record, updated_at: new Date().toISOString() })
+    .update(patch)
     .eq("source_id", key);
   if (updErr) {
     return NextResponse.json({ error: "update_failed" }, { status: 500 });

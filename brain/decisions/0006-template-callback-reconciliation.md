@@ -1,10 +1,12 @@
 # 0006 — Reconciliation backstop for missed wr-template build callbacks
 
-- Status: proposed
+- Status: accepted (2026-06-16) — SL confirmed + built the read path; WR reconcile cron built. Implementation lands on coordinated deploy; gap G-C4-2 stays open until both sides are deployed and Zap is recovered.
 - Date: 2026-06-16
 - Deciders: WR maintainer, operator; SiteLaunchr maintainer (cross-repo half)
 - Tier impact: none
 - Contracts touched: [C4](../contracts/c4-sitelaunchr-callbacks.md) (SL→WR callbacks), [C2](../contracts/c2-sitelaunchr-builds-wr-template.md) (wr-template builds)
+
+> **Confirmed shape (SL, 2026-06-16):** `GET /api/builds/:build_id` (+ `?external_id=`); auth = per-source HMAC with an **empty-body** signature base `${timestamp}.` (`signPayload(ts, "", secret)`); `200 { build_id, external_id, status, site_url, error_message }`, `404` for unknown **or** cross-source (no existence leak), `429` rate-limited. `status` is SL's full authoritative enum (not the 5-value callback subset); WR reconciles on `status === "succeeded" && site_url` → live, `failed|canceled|kura_push_failed` → build_failed, else keep polling. Root cause of the original drop: SL's `succeeded` phase is outside `TERMINAL_PHASES`, so neither its callback-sent tracking nor its gap-detection re-fire it — a single dropped `succeeded` POST was unrecoverable by push, which is exactly what this pull backstop fixes. WR side: `lib/templates/sl/readBuild.ts` + `app/api/cron/reconcile-template-builds` (every 30 min).
 
 ## Context
 End-to-end test on 2026-06-16 (a real build for `external_id = wr-tpl-ChIJQ-2wFmuBS4cReF0ZCRJm1Cg`, `build_id = 3c78c4bc-f422-4f61-92b2-d5a98ae88314`):

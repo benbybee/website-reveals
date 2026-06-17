@@ -8,6 +8,7 @@ const valid: CanonicalRecord = {
   source_id: "wr-tpl-1",
   business_name: "Joe",
   industry_slug: "home-services",
+  address: { street: "1 Main", city: "Mesa", state: "AZ", zip: "85201", country: "US" },
   phone: "+14805551234",
 };
 // Missing business_name AND industry → toBuildPayload yields an invalid payload.

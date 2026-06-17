@@ -44,11 +44,15 @@ export function BuildsBoard({ campaigns }: { campaigns: { id: string; label: str
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [confirmCfg, setConfirmCfg] = useState<ConfirmConfig | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [lastSync, setLastSync] = useState<string | null>(null);
   const fetchSeq = useRef(0);
 
-  const load = useCallback(async () => {
+  // `silent` polls swap in fresh data without flashing the "Loading…" state, so
+  // the auto-refresh tick never makes the table flicker.
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     const seq = ++fetchSeq.current;
-    setLoading(true);
+    if (!opts?.silent) setLoading(true);
     const sp = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
     if (statusFilter) sp.set("status", statusFilter);
     if (campaignFilter) sp.set("campaign", campaignFilter);
@@ -61,13 +65,38 @@ export function BuildsBoard({ campaigns }: { campaigns: { id: string; label: str
         setBuilds(json.builds ?? []);
         setTotal(json.total ?? 0);
         setCounts(json.counts ?? {});
+        setLastSync(new Date().toLocaleTimeString());
       }
     } finally {
-      if (seq === fetchSeq.current) setLoading(false);
+      if (seq === fetchSeq.current && !opts?.silent) setLoading(false);
     }
   }, [page, statusFilter, campaignFilter, q]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Auto-refresh is paused while the operator is mid-action (a rebuild in
+  // flight, the confirm dialog open, or rows selected) so the list never
+  // re-sorts under them; the live indicator reflects this.
+  const blocked = confirmCfg !== null || busy || selected.size > 0;
+  const loadRef = useRef(load);
+  const blockRef = useRef(blocked);
+  useEffect(() => { loadRef.current = load; }, [load]);
+  useEffect(() => { blockRef.current = blocked; }, [blocked]);
+
+  // Poll fast while anything is still building, slow once everything is
+  // terminal. Skip ticks when the tab is hidden (no background churn) or while
+  // an action is in progress.
+  const hasBuilding = (counts.building ?? 0) > 0;
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const intervalMs = hasBuilding ? 5000 : 20000;
+    const h = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      if (blockRef.current) return;
+      loadRef.current({ silent: true });
+    }, intervalMs);
+    return () => clearInterval(h);
+  }, [autoRefresh, hasBuilding]);
 
   function setFilter<T>(set: (v: T) => void) {
     return (v: T) => { set(v); setPage(0); setSelected(new Set()); };
@@ -116,11 +145,27 @@ export function BuildsBoard({ campaigns }: { campaigns: { id: string; label: str
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
         <Link href="/admin/templates" style={{ fontSize: 13, color: "#888886", textDecoration: "none" }}>← Template Sites</Link>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {lastSync && <span style={{ fontSize: 11, color: "#a8a6a0", fontFamily: "var(--font-mono)" }}>updated {lastSync}</span>}
+          <button
+            onClick={() => setAutoRefresh((a) => !a)}
+            style={{ ...navBtn, display: "inline-flex", alignItems: "center", gap: 7 }}
+            title={autoRefresh ? "Auto-refresh is on — click to pause" : "Auto-refresh is off — click to resume"}
+          >
+            <span
+              style={{
+                width: 8, height: 8, borderRadius: "50%",
+                background: autoRefresh ? (blocked ? "#9a6a00" : "#0a7a3d") : "#c9c7c0",
+                animation: autoRefresh && !blocked ? "bpulse 1.6s ease-out infinite" : "none",
+              }}
+            />
+            {autoRefresh ? (blocked ? "Paused" : "Live") : "Auto-refresh off"}
+          </button>
+          <button onClick={() => load()} disabled={loading} style={navBtn} title="Refresh now">{loading ? "…" : "↻"}</button>
           <Link href="/admin/templates/sales" style={navBtn}>Sales board →</Link>
-          <button onClick={load} disabled={loading} style={navBtn}>{loading ? "Refreshing…" : "↻ Refresh"}</button>
         </div>
       </div>
+      <style>{`@keyframes bpulse { 0% { box-shadow: 0 0 0 0 rgba(10,122,61,0.45); } 70% { box-shadow: 0 0 0 5px rgba(10,122,61,0); } 100% { box-shadow: 0 0 0 0 rgba(10,122,61,0); } }`}</style>
       <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "1.75rem", fontWeight: 700, marginBottom: 14 }}>Builds</h1>
 
       {/* Status tiles — clickable filters with live counts */}

@@ -31,8 +31,9 @@ describe("assembleAndPush — dry run", () => {
     const db = {
       from: (table: string) => {
         if (table === "tpl_prospects") {
+          // select("record").eq(campaign_id).is(suppressed_at,null).eq(stage)
           return {
-            select: () => ({ eq: () => ({ eq: () => Promise.resolve({ data: [{ record: rec }], error: null }) }) }),
+            select: () => ({ eq: () => ({ is: () => ({ eq: () => Promise.resolve({ data: [{ record: rec }], error: null }) }) }) }),
           };
         }
         return {

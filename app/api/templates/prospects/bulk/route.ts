@@ -8,6 +8,7 @@ interface BulkBody {
   mail_ready?: boolean;
   do_not_mail?: boolean;
   sales_rep_id?: string | null; // assign (uuid) or unassign (null) the rep
+  suppress?: boolean; // true = move to the Suppressed list; false = restore
 }
 
 // Bulk-set the mailing eligibility flags on selected prospects. The operator
@@ -28,7 +29,12 @@ export async function POST(req: NextRequest) {
   const ids = (body.ids ?? []).filter((x) => typeof x === "string" && x);
   if (!ids.length) return NextResponse.json({ error: "no_ids" }, { status: 400 });
   if (ids.length > 5000) return NextResponse.json({ error: "too_many_ids" }, { status: 400 });
-  if (body.mail_ready === undefined && body.do_not_mail === undefined && body.sales_rep_id === undefined) {
+  if (
+    body.mail_ready === undefined &&
+    body.do_not_mail === undefined &&
+    body.sales_rep_id === undefined &&
+    body.suppress === undefined
+  ) {
     return NextResponse.json({ error: "no_flags" }, { status: 400 });
   }
 
@@ -41,6 +47,22 @@ export async function POST(req: NextRequest) {
   }
   // Assign (or clear, with null) the rep who owns these leads in the portal.
   if (body.sales_rep_id !== undefined) patch.sales_rep_id = body.sales_rep_id || null;
+  // Suppress = move the lead out of the working list to the Suppressed list
+  // (non-destructive). Restore (false) clears the flag + reason. Suppressing
+  // also drops mail_ready so a restored-then-resuppressed lead can't slip into
+  // a mail run.
+  if (body.suppress !== undefined) {
+    if (body.suppress === true) {
+      patch.suppressed_at = new Date().toISOString();
+      patch.suppressed_by = auth.user.email;
+      patch.suppression_reason = "manual";
+      patch.mail_ready = false;
+    } else {
+      patch.suppressed_at = null;
+      patch.suppressed_by = null;
+      patch.suppression_reason = null;
+    }
+  }
 
   const db = tplDb();
   const { data, error } = await db

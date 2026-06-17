@@ -26,11 +26,15 @@ function params(init: Record<string, string>) {
   return new URLSearchParams(init);
 }
 
+// Every call applies the default "active only" filter (suppressed_at IS NULL)
+// unless suppressed=only|all overrides it — so it trails the param-driven calls.
+const SUP = { method: "or", args: ["suppressed_at.is.null"] };
+
 describe("applyProspectFilters", () => {
-  it("applies nothing for empty params", () => {
+  it("applies only the default active-only filter for empty params", () => {
     const { q, calls } = stub();
     applyProspectFilters(q, params({}));
-    expect(calls).toEqual([]);
+    expect(calls).toEqual([SUP]);
   });
 
   it("maps stage / website_status / agent to column equality", () => {
@@ -40,13 +44,14 @@ describe("applyProspectFilters", () => {
       { method: "eq", args: ["stage", "qualified"] },
       { method: "eq", args: ["website_status", "has_site"] },
       { method: "eq", args: ["agent_id", "rep@x.com"] },
+      SUP,
     ]);
   });
 
   it("maps missing to completeness containment", () => {
     const { q, calls } = stub();
     applyProspectFilters(q, params({ missing: "phone" }));
-    expect(calls).toEqual([{ method: "contains", args: ["completeness", { missing: ["phone"] }] }]);
+    expect(calls).toEqual([{ method: "contains", args: ["completeness", { missing: ["phone"] }] }, SUP]);
   });
 
   it("dna=has requires BOTH logo and primary color (neq '' covers null and empty)", () => {
@@ -55,13 +60,14 @@ describe("applyProspectFilters", () => {
     expect(calls).toEqual([
       { method: "neq", args: ["record->logo->>src_url", ""] },
       { method: "neq", args: ["record->brand_colors->>primary", ""] },
+      SUP,
     ]);
   });
 
   it("dna=missing matches EITHER part absent via one or-group", () => {
     const { q, calls } = stub();
     applyProspectFilters(q, params({ dna: "missing" }));
-    expect(calls).toEqual([{ method: "or", args: [DNA_MISSING_OR] }]);
+    expect(calls).toEqual([{ method: "or", args: [DNA_MISSING_OR] }, SUP]);
     expect(DNA_MISSING_OR).toBe(
       'record->logo->>src_url.is.null,record->logo->>src_url.eq."",record->brand_colors->>primary.is.null,record->brand_colors->>primary.eq.""',
     );
@@ -70,19 +76,21 @@ describe("applyProspectFilters", () => {
   it("address=has requires all four mailable parts", () => {
     const { q, calls } = stub();
     applyProspectFilters(q, params({ address: "has" }));
-    expect(calls.map((c) => c.args[0])).toEqual([
+    const addressCalls = calls.slice(0, 4);
+    expect(addressCalls.map((c) => c.args[0])).toEqual([
       "record->address->>street",
       "record->address->>city",
       "record->address->>state",
       "record->address->>zip",
     ]);
-    expect(calls.every((c) => c.method === "neq" && c.args[1] === "")).toBe(true);
+    expect(addressCalls.every((c) => c.method === "neq" && c.args[1] === "")).toBe(true);
+    expect(calls[4]).toEqual(SUP);
   });
 
   it("address=missing matches ANY absent part via one or-group", () => {
     const { q, calls } = stub();
     applyProspectFilters(q, params({ address: "missing" }));
-    expect(calls).toEqual([{ method: "or", args: [ADDRESS_MISSING_OR] }]);
+    expect(calls).toEqual([{ method: "or", args: [ADDRESS_MISSING_OR] }, SUP]);
   });
 
   it("composes dna and address into AND-ed groups", () => {
@@ -92,33 +100,52 @@ describe("applyProspectFilters", () => {
       { method: "neq", args: ["record->logo->>src_url", ""] },
       { method: "neq", args: ["record->brand_colors->>primary", ""] },
       { method: "or", args: [ADDRESS_MISSING_OR] },
+      SUP,
     ]);
   });
 
   it("site=has requires a generated preview_url (neq '')", () => {
     const { q, calls } = stub();
     applyProspectFilters(q, params({ site: "has" }));
-    expect(calls).toEqual([{ method: "neq", args: ["preview_url", ""] }]);
+    expect(calls).toEqual([{ method: "neq", args: ["preview_url", ""] }, SUP]);
   });
 
   it("site=missing matches null/empty preview_url via one or-group", () => {
     const { q, calls } = stub();
     applyProspectFilters(q, params({ site: "missing" }));
-    expect(calls).toEqual([{ method: "or", args: ['preview_url.is.null,preview_url.eq.""'] }]);
+    expect(calls).toEqual([{ method: "or", args: ['preview_url.is.null,preview_url.eq.""'] }, SUP]);
   });
 
   it("exported=yes|no map to exported_at null checks", () => {
     const yes = stub();
     applyProspectFilters(yes.q, params({ exported: "yes" }));
-    expect(yes.calls).toEqual([{ method: "or", args: ["exported_at.not.is.null"] }]);
+    expect(yes.calls).toEqual([{ method: "or", args: ["exported_at.not.is.null"] }, SUP]);
     const no = stub();
     applyProspectFilters(no.q, params({ exported: "no" }));
-    expect(no.calls).toEqual([{ method: "or", args: ["exported_at.is.null"] }]);
+    expect(no.calls).toEqual([{ method: "or", args: ["exported_at.is.null"] }, SUP]);
   });
 
-  it("ignores unknown dna/address values instead of erroring", () => {
+  it("hides suppressed leads by default (active-only)", () => {
+    const { q, calls } = stub();
+    applyProspectFilters(q, params({}));
+    expect(calls).toEqual([SUP]);
+  });
+
+  it("suppressed=only surfaces ONLY suppressed leads (no default exclude)", () => {
+    const { q, calls } = stub();
+    applyProspectFilters(q, params({ suppressed: "only" }));
+    expect(calls).toEqual([{ method: "or", args: ["suppressed_at.not.is.null"] }]);
+  });
+
+  it("suppressed=all shows both (no suppression filter at all)", () => {
+    const { q, calls } = stub();
+    applyProspectFilters(q, params({ suppressed: "all" }));
+    expect(calls).toEqual([]);
+  });
+
+  it("ignores unknown dna/address values but still applies the active-only default", () => {
     const { q, calls } = stub();
     applyProspectFilters(q, params({ dna: "bogus", address: "" }));
-    expect(calls).toEqual([]);
+    expect(calls).toEqual([SUP]);
   });
 });

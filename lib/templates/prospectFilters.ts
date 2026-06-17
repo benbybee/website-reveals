@@ -81,5 +81,15 @@ export function applyProspectFilters<Q extends ProspectFilterable<Q>>(
   if (exported === "yes") query = query.or("exported_at.not.is.null");
   else if (exported === "no") query = query.or("exported_at.is.null");
 
+  // suppressed — list cleaning. Suppressed leads (suppressed_at stamped) are
+  // moved to the cross-campaign Suppressed list and removed from the working
+  // CRM list AND the CSV export BY DEFAULT (the campaign list should only hold
+  // people we intend to mail). `suppressed=only` surfaces just them;
+  // `suppressed=all` shows both. Expressed via or() to stay within the
+  // ProspectFilterable interface (no is/not methods, see the test mock).
+  const suppressed = sp.get("suppressed");
+  if (suppressed === "only") query = query.or("suppressed_at.not.is.null");
+  else if (suppressed !== "all") query = query.or("suppressed_at.is.null");
+
   return query;
 }

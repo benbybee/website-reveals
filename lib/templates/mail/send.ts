@@ -44,6 +44,7 @@ export async function loadEligible(
     .eq("stage", "live")
     .eq("mail_ready", true)
     .eq("do_not_mail", false)
+    .is("suppressed_at", null)
     .limit(10000);
 
   const { data: mailed } = await db

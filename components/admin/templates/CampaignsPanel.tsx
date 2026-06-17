@@ -138,6 +138,7 @@ export function CampaignsPanel({ campaigns, industries }: { campaigns: CampaignS
         <div style={{ display: "flex", gap: 8 }}>
           <Link href="/admin/templates/industries" style={navBtn}>Industries</Link>
           <Link href="/admin/templates/mail" style={navBtn}>Mail settings</Link>
+          <Link href="/admin/templates/suppressed" style={navBtn}>Suppressed →</Link>
           <Link href="/admin/templates/builds" style={navBtn}>Builds →</Link>
           <Link href="/admin/templates/sales" style={navBtn}>Sales board →</Link>
         </div>

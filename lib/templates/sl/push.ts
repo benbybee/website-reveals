@@ -56,7 +56,9 @@ export async function assembleAndPush(
   const { dryRun = false } = opts;
   const batchId = opts.batchId ?? `tpl-${campaignId}-${Date.now()}`;
 
-  let q = db.from("tpl_prospects").select("record").eq("campaign_id", campaignId);
+  // Suppressed leads are removed from the working list and must never build,
+  // even if an explicit prospectId list somehow includes one.
+  let q = db.from("tpl_prospects").select("record").eq("campaign_id", campaignId).is("suppressed_at", null);
   q = opts.prospectIds && opts.prospectIds.length > 0
     ? q.in("id", opts.prospectIds)
     : q.eq("stage", "qualified");

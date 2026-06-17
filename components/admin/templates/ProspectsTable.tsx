@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { CanonicalRecord } from "@/lib/templates/types";
 import { ProspectDrawer } from "./ProspectDrawer";
 import { ConfirmDialog, type ConfirmConfig } from "./ConfirmDialog";
+import { CleanListModal } from "./CleanListModal";
 import { useToast } from "@/components/admin/ToastProvider";
 
 export interface CampaignHeader {
@@ -59,6 +60,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
   const [actionBusy, setActionBusy] = useState(false);
   const [reps, setReps] = useState<{ id: string; first_name: string; last_name: string | null }[]>([]);
   const [confirmCfg, setConfirmCfg] = useState<ConfirmConfig | null>(null);
+  const [cleanOpen, setCleanOpen] = useState(false);
   const { success, error } = useToast();
   // Monotonic fetch token: rapid filter/page changes overlap requests, and an
   // older response landing last would otherwise overwrite the newer one.
@@ -203,6 +205,31 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
     }
   }
 
+  // Suppress = move the selected leads out of the working list to the Suppressed
+  // list (non-destructive). The campaign list should only hold people we intend
+  // to mail; suppressed leads vanish here and reappear on /admin/templates/suppressed.
+  async function bulkSuppress() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    setActionBusy(true);
+    try {
+      const res = await fetch(`/api/templates/prospects/bulk`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids, suppress: true }),
+      });
+      if (!res.ok) return; // ToastProvider surfaces the error
+      const json = await res.json();
+      success("Moved to Suppressed", `${json.updated ?? ids.length} lead(s) removed from this list. Restore them on the Suppressed page.`);
+      setSelected(new Set());
+      load();
+    } catch {
+      error("Couldn't suppress", "Something went wrong — please try again.");
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
   function exportCsv() {
     const sp = new URLSearchParams();
     if (stageFilter) sp.set("stage", stageFilter);
@@ -314,7 +341,9 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "6px 0 18px" }}>
         <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "1.75rem", fontWeight: 700 }}>{campaign.industry_slug || campaign.name || "Campaign"}</h1>
         <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/admin/templates/suppressed" style={ghostBtn}>Suppressed →</Link>
           <Link href="/admin/templates/builds" style={ghostBtn}>Builds →</Link>
+          <button onClick={() => setCleanOpen(true)} style={ghostBtn}>Clean list</button>
           <button onClick={exportCsv} style={ghostBtn}>Export CSV</button>
           <button onClick={pushCampaign} disabled={actionBusy} style={primaryBtn}>Push qualified → SL</button>
         </div>
@@ -379,7 +408,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
           <button onClick={approveForSL} disabled={actionBusy} style={ghostBtn}>Approve for SL</button>
           <button onClick={buildSelected} disabled={actionBusy} style={primaryBtn}>Build selected → SL</button>
           <button onClick={() => bulkMail({ mail_ready: true })} disabled={actionBusy} style={ghostBtn}>Mark mail-ready</button>
-          <button onClick={() => bulkMail({ do_not_mail: true })} disabled={actionBusy} style={ghostBtn}>Suppress</button>
+          <button onClick={bulkSuppress} disabled={actionBusy} style={suppressBtn} title="Remove from this list (moves to the Suppressed list, not deleted)">Suppress</button>
           <button onClick={() => setSelected(new Set())} style={{ ...ghostBtn, marginLeft: "auto" }}>Clear</button>
         </div>
       )}
@@ -446,6 +475,19 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
       )}
 
       {confirmCfg && <ConfirmDialog config={confirmCfg} onClose={() => setConfirmCfg(null)} />}
+
+      {cleanOpen && (
+        <CleanListModal
+          campaignId={campaign.id}
+          onClose={() => setCleanOpen(false)}
+          onSuppressed={(count) => {
+            setCleanOpen(false);
+            success("List cleaned", `${count} lead(s) moved to the Suppressed list.`);
+            setSelected(new Set());
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -562,4 +604,5 @@ const th: React.CSSProperties = { padding: "9px 12px", textAlign: "left", fontFa
 const td: React.CSSProperties = { padding: "10px 12px", fontSize: 13, verticalAlign: "middle" };
 const primaryBtn: React.CSSProperties = { fontFamily: "var(--font-sans)", fontSize: 13, fontWeight: 600, color: "#fff", background: "#ff3d00", border: "none", borderRadius: 4, padding: "8px 16px", cursor: "pointer" };
 const ghostBtn: React.CSSProperties = { fontFamily: "var(--font-sans)", fontSize: 12, fontWeight: 500, color: "#555553", background: "#fff", border: "1.5px solid #d8d6cf", borderRadius: 4, padding: "6px 12px", cursor: "pointer" };
+const suppressBtn: React.CSSProperties = { fontFamily: "var(--font-sans)", fontSize: 12, fontWeight: 600, color: "#b3300a", background: "#fff", border: "1.5px solid #f3c0b8", borderRadius: 4, padding: "6px 12px", cursor: "pointer" };
 const actionBar: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10, background: "#fff6f3", border: "1.5px solid #ffcdc0", borderRadius: 6, padding: "10px 14px", marginBottom: 14 };

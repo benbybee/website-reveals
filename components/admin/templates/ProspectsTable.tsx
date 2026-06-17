@@ -59,7 +59,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
   const [actionBusy, setActionBusy] = useState(false);
   const [reps, setReps] = useState<{ id: string; first_name: string; last_name: string | null }[]>([]);
   const [confirmCfg, setConfirmCfg] = useState<ConfirmConfig | null>(null);
-  const { success } = useToast();
+  const { success, error } = useToast();
   // Monotonic fetch token: rapid filter/page changes overlap requests, and an
   // older response landing last would otherwise overwrite the newer one.
   const fetchSeq = useRef(0);
@@ -239,10 +239,13 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
             headers: { "content-type": "application/json" },
             body: JSON.stringify({}),
           });
-          if (!res.ok) return;
+          if (!res.ok) return; // ToastProvider's fetch wrapper already toasted the 4xx/5xx
           const json = await res.json();
-          success("Pushed to SiteLaunchr", `${json.recordCount ?? dry.recordCount} build(s) queued — track them on the Builds page.`);
+          success("Dispatched to SiteLaunchr", `${json.recordCount ?? dry.recordCount} build(s) sent to SiteLaunchr — track progress on the Builds page.`);
           load();
+        } catch {
+          // fetch rejected (timeout/abort) — the wrapper can't see a non-response; toast here.
+          error("Dispatch may still be running", "We couldn't confirm the response, but builds were sent. Check the Builds page in a moment.");
         } finally {
           setActionBusy(false);
         }
@@ -276,11 +279,14 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ prospectIds }),
           });
-          if (!res.ok) return;
+          if (!res.ok) return; // ToastProvider's fetch wrapper already toasted the 4xx/5xx
           const json = await res.json();
-          success("Dispatched to SiteLaunchr", `${json.recordCount ?? prospectIds.length} build(s) queued — track them on the Builds page.`);
+          success("Dispatched to SiteLaunchr", `${json.recordCount ?? prospectIds.length} build(s) sent to SiteLaunchr — track progress on the Builds page.`);
           setSelected(new Set());
           load();
+        } catch {
+          // fetch rejected (timeout/abort) — the wrapper can't see a non-response; toast here.
+          error("Dispatch may still be running", "We couldn't confirm the response, but builds were sent. Check the Builds page in a moment.");
         } finally {
           setActionBusy(false);
         }

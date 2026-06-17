@@ -28,9 +28,14 @@ export function ConfirmDialog({ config, onClose }: { config: ConfirmConfig; onCl
     setBusy(true);
     try {
       await config.onConfirm();
-      onClose();
+    } catch (err) {
+      // onConfirm failed/aborted (e.g. the network request rejected). The
+      // caller owns success/error messaging — the dialog's only job is to never
+      // trap the operator, so it ALWAYS closes via `finally` below.
+      console.error("[ConfirmDialog] onConfirm failed:", err);
     } finally {
       setBusy(false);
+      onClose();
     }
   }
 

@@ -14,6 +14,13 @@ export interface AssembleResult {
   recordCount: number;
   dryRun: boolean;
   push?: PushResult;
+  /**
+   * Set only when `defer` was requested for the `post` transport: the built
+   * payloads the caller must dispatch itself (after responding to the client).
+   * Lets the route run the slow per-build SL POST loop via next/server after()
+   * so the client isn't blocked on it.
+   */
+  deferredBuilds?: BuildPayload[];
 }
 
 export interface AssembleOptions {
@@ -26,6 +33,13 @@ export interface AssembleOptions {
    * to the campaign-wide "all qualified" behavior.
    */
   prospectIds?: string[];
+  /**
+   * Defer the slow `post`-transport SL loop: build payloads + persist the batch
+   * row, then RETURN them (deferredBuilds) instead of awaiting pushBuilds, so the
+   * caller can dispatch after responding. No-op for the `table` transport (it's a
+   * single fast write) and for dry runs.
+   */
+  defer?: boolean;
 }
 
 /**
@@ -76,6 +90,14 @@ export async function assembleAndPush(
   };
 
   if (dryRun) return base;
+
+  // Deferred post-transport dispatch: hand the payloads back so the route can run
+  // the slow per-build SL POST loop AFTER responding (next/server after()),
+  // instead of blocking the client on it. The `table` transport is a single fast
+  // write, so it dispatches inline as before.
+  if (opts.defer && opts.transport === "post") {
+    return { ...base, deferredBuilds: builds };
+  }
 
   const push = await pushBuilds(builds, { transport: opts.transport, db, batchRowId });
   return { ...base, push };

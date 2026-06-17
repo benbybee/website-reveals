@@ -55,19 +55,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
   }
 
-  const { data, error } = await db
+  // Gather the matching active ids in this campaign, then suppress them via the
+  // RPC (which detaches campaign_id + recomputes the campaign's counts atomically).
+  const { data: matches, error: selErr } = await db
     .from("tpl_prospects")
-    .update({
-      suppressed_at: new Date().toISOString(),
-      suppressed_by: auth.user.email,
-      suppression_reason: `keyword: ${keywords.join(", ")}`,
-      mail_ready: false,
-    })
+    .select("id")
     .eq("campaign_id", id)
     .is("suppressed_at", null)
-    .or(orFilter)
-    .select("id");
+    .or(orFilter);
+  if (selErr) return NextResponse.json({ error: selErr.message }, { status: 500 });
+  const ids = (matches ?? []).map((r) => (r as { id: string }).id);
+  if (ids.length === 0) return NextResponse.json({ ok: true, suppressed: 0, keywords });
+
+  const { data, error } = await db.rpc("tpl_suppress_prospects", {
+    p_ids: ids,
+    p_by: auth.user.email,
+    p_reason: `keyword: ${keywords.join(", ")}`,
+  });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true, suppressed: (data ?? []).length, keywords });
+  return NextResponse.json({ ok: true, suppressed: (data as number) ?? 0, keywords });
 }

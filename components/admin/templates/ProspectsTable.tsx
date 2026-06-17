@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { CanonicalRecord } from "@/lib/templates/types";
 import { ProspectDrawer } from "./ProspectDrawer";
 import { ConfirmDialog, type ConfirmConfig } from "./ConfirmDialog";
@@ -62,6 +63,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
   const [confirmCfg, setConfirmCfg] = useState<ConfirmConfig | null>(null);
   const [cleanOpen, setCleanOpen] = useState(false);
   const { success, error } = useToast();
+  const router = useRouter();
   // Monotonic fetch token: rapid filter/page changes overlap requests, and an
   // older response landing last would otherwise overwrite the newer one.
   const fetchSeq = useRef(0);
@@ -223,6 +225,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
       success("Moved to Suppressed", `${json.updated ?? ids.length} lead(s) removed from this list. Restore them on the Suppressed page.`);
       setSelected(new Set());
       load();
+      router.refresh(); // suppression changed the campaign counts — re-render the header
     } catch {
       error("Couldn't suppress", "Something went wrong — please try again.");
     } finally {
@@ -485,6 +488,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
             success("List cleaned", `${count} lead(s) moved to the Suppressed list.`);
             setSelected(new Set());
             load();
+            router.refresh(); // counts changed — re-render the header stats
           }}
         />
       )}

@@ -34,10 +34,13 @@ export async function GET(req: NextRequest) {
   const from = page * pageSize;
 
   const db = tplDb();
+  // Suppressed rows have campaign_id = NULL (detached); the origin campaign is in
+  // suppressed_from_campaign_id — aliased to campaign_id so the board's label
+  // lookup is unchanged.
   let query = db
     .from("tpl_prospects")
     .select(
-      "id, business_name, city, state, campaign_id, suppressed_at, suppression_reason, industry:record->>industry_slug",
+      "id, business_name, city, state, campaign_id:suppressed_from_campaign_id, suppressed_at, suppression_reason, industry:record->>industry_slug",
       { count: "exact" },
     )
     .not("suppressed_at", "is", null);

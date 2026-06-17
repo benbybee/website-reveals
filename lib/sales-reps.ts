@@ -29,6 +29,7 @@ export async function getTemplateLeadsForRep(repId: string): Promise<RepTemplate
       "id, source_id, business_name, city, state, phone, stage, preview_url, lookup_count, last_looked_up_at, click_count, last_clicked_at, sold_at",
     )
     .eq("sales_rep_id", repId)
+    .is("suppressed_at", null) // suppressed leads drop off the rep's board too
     .order("click_count", { ascending: false })
     .order("last_clicked_at", { ascending: false, nullsFirst: false });
   if (error) {

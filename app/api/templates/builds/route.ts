@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
   listQ = (status && (BUILD_STAGES as readonly string[]).includes(status))
     ? listQ.eq("stage", status)
     : listQ.in("stage", BUILD_STAGES as unknown as string[]);
+  listQ = listQ.is("suppressed_at", null); // suppressed builds drop off the board
   if (campaign) listQ = listQ.eq("campaign_id", campaign);
   if (q) listQ = listQ.ilike("business_name", `%${q}%`);
   const from = page * pageSize;
@@ -68,7 +69,7 @@ export async function GET(req: NextRequest) {
   const counts: Record<string, number> = {};
   await Promise.all(
     BUILD_STAGES.map(async (s) => {
-      let cq = db.from("tpl_prospects").select("id", { count: "exact", head: true }).eq("stage", s);
+      let cq = db.from("tpl_prospects").select("id", { count: "exact", head: true }).eq("stage", s).is("suppressed_at", null);
       if (campaign) cq = cq.eq("campaign_id", campaign);
       if (q) cq = cq.ilike("business_name", `%${q}%`);
       const { count: c } = await cq;

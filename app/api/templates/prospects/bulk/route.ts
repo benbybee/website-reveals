@@ -38,38 +38,38 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "no_flags" }, { status: 400 });
   }
 
-  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const db = tplDb();
+
+  // Suppress / restore is NOT a plain column write: it detaches (or re-attaches)
+  // campaign_id and recomputes the campaign's counts atomically, so it goes
+  // through the dedicated RPCs. A suppressed lead is no longer associated with a
+  // campaign — it lives on the cross-campaign Suppressed list until restored.
+  let updated = 0;
+  if (body.suppress === true) {
+    const { data, error } = await db.rpc("tpl_suppress_prospects", { p_ids: ids, p_by: auth.user.email, p_reason: "manual" });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    updated = (data as number) ?? 0;
+  } else if (body.suppress === false) {
+    const { data, error } = await db.rpc("tpl_restore_prospects", { p_ids: ids });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    updated = (data as number) ?? 0;
+  }
+
+  // The remaining flags are plain column updates on the (still-attached) rows.
+  const patch: Record<string, unknown> = {};
   if (body.mail_ready !== undefined) patch.mail_ready = body.mail_ready;
   if (body.do_not_mail !== undefined) {
     patch.do_not_mail = body.do_not_mail;
-    // Suppressing a prospect also clears its ready flag so it can't slip through.
-    if (body.do_not_mail === true) patch.mail_ready = false;
+    if (body.do_not_mail === true) patch.mail_ready = false; // can't be ready + do-not-mail
   }
-  // Assign (or clear, with null) the rep who owns these leads in the portal.
   if (body.sales_rep_id !== undefined) patch.sales_rep_id = body.sales_rep_id || null;
-  // Suppress = move the lead out of the working list to the Suppressed list
-  // (non-destructive). Restore (false) clears the flag + reason. Suppressing
-  // also drops mail_ready so a restored-then-resuppressed lead can't slip into
-  // a mail run.
-  if (body.suppress !== undefined) {
-    if (body.suppress === true) {
-      patch.suppressed_at = new Date().toISOString();
-      patch.suppressed_by = auth.user.email;
-      patch.suppression_reason = "manual";
-      patch.mail_ready = false;
-    } else {
-      patch.suppressed_at = null;
-      patch.suppressed_by = null;
-      patch.suppression_reason = null;
-    }
+
+  if (Object.keys(patch).length > 0) {
+    patch.updated_at = new Date().toISOString();
+    const { data, error } = await db.from("tpl_prospects").update(patch).in("id", ids).select("id");
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    updated = (data ?? []).length;
   }
 
-  const db = tplDb();
-  const { data, error } = await db
-    .from("tpl_prospects")
-    .update(patch)
-    .in("id", ids)
-    .select("id");
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, updated: (data ?? []).length });
+  return NextResponse.json({ ok: true, updated });
 }

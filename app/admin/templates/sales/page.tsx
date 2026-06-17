@@ -32,6 +32,7 @@ export default async function SalesPage() {
       .from("tpl_prospects")
       .select("id, business_name, city, state, phone, website, stage, agent_id, preview_url, call_count, last_called_at, lookup_count, last_looked_up_at, click_count, last_clicked_at, sold_at, campaign_id")
       .in("stage", BOARD_STAGES)
+      .is("suppressed_at", null) // suppressed leads are off the sales board too
       .order("updated_at", { ascending: false })
       .limit(500),
     db.from("tpl_campaigns").select("id, industry_slug").order("created_at", { ascending: false }),

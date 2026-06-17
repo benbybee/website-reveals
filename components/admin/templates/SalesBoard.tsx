@@ -125,17 +125,17 @@ export function SalesBoard({
               <th style={{ ...th, width: 70 }}>Calls</th>
               <th style={th}>Preview</th>
               <th style={th}>Agent</th>
+              <th style={{ ...th, width: 90 }}>Sold</th>
               <th style={{ ...th, width: 160 }}>Stage</th>
               <th style={{ ...th, width: 90 }} />
             </tr>
           </thead>
           <tbody>
-            {visible.length === 0 && <tr><td colSpan={10} style={{ ...td, textAlign: "center", color: "#888886", padding: 28 }}>No prospects in the sales funnel.</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={11} style={{ ...td, textAlign: "center", color: "#888886", padding: 28 }}>No prospects in the sales funnel.</td></tr>}
             {visible.map((p) => (
               <tr key={p.id} style={{ borderTop: "1px solid #f0eeea" }}>
                 <td style={td}>
                   <span style={{ fontWeight: 600, color: "#111110" }}>{p.business_name || "—"}</span>
-                  {p.sold_at && <span style={{ marginLeft: 8, fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "#fff", background: "#1a7a3a", padding: "2px 6px", borderRadius: 3, textTransform: "uppercase" }}>sold</span>}
                 </td>
                 <td style={{ ...td, color: "#555553" }}>{[p.city, p.state].filter(Boolean).join(", ") || "—"}</td>
                 <td style={td}>
@@ -148,6 +148,7 @@ export function SalesBoard({
                   {p.preview_url ? <a href={p.preview_url} target="_blank" rel="noreferrer" style={{ color: "#0a4a7a", fontSize: 12 }}>view →</a> : <span style={{ color: "#bbb", fontSize: 12 }}>—</span>}
                 </td>
                 <td style={{ ...td, fontSize: 11, color: "#888886", fontFamily: "var(--font-mono)" }}>{p.agent_id || "unassigned"}</td>
+                <td style={{ ...td, textAlign: "center" }}><SoldBadge soldAt={p.sold_at} /></td>
                 <td style={td}>
                   {p.stage === "converted" ? (
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "#1a7a3a" }}>converted ✓</span>
@@ -207,6 +208,19 @@ function EngageBadge({ count, at, glyph, tone, title }: { count: number; at: str
     <span title={`${title} ${count}×${when ? ` — last ${when}` : ""}`}
       style={{ display: "inline-block", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, borderRadius: 4, padding: "2px 6px", ...c }}>
       {glyph} {count}
+    </span>
+  );
+}
+
+/** Sold pill — green "SOLD" with the sold date on hover, em-dash when not sold.
+ * A rep sets this from their portal; the operator converts later. */
+function SoldBadge({ soldAt }: { soldAt: string | null }) {
+  if (!soldAt) return <span style={{ color: "#c9c7c0", fontSize: 12 }} title="Not sold yet">—</span>;
+  const when = new Date(soldAt).toLocaleDateString();
+  return (
+    <span title={`Marked sold ${when}`}
+      style={{ display: "inline-block", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "#fff", background: "#1a7a3a", padding: "3px 7px", borderRadius: 3, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+      sold
     </span>
   );
 }

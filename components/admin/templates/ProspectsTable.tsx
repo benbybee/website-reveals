@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { CanonicalRecord } from "@/lib/templates/types";
 import { ProspectDrawer } from "./ProspectDrawer";
+import { ConfirmDialog, type ConfirmConfig } from "./ConfirmDialog";
+import { useToast } from "@/components/admin/ToastProvider";
 
 export interface CampaignHeader {
   id: string;
@@ -56,6 +58,8 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [reps, setReps] = useState<{ id: string; first_name: string; last_name: string | null }[]>([]);
+  const [confirmCfg, setConfirmCfg] = useState<ConfirmConfig | null>(null);
+  const { success } = useToast();
   // Monotonic fetch token: rapid filter/page changes overlap requests, and an
   // older response landing last would otherwise overwrite the newer one.
   const fetchSeq = useRef(0);
@@ -213,30 +217,37 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
   }
 
   async function pushCampaign() {
+    // Dry-run first to surface how many qualified prospects will ship; the
+    // ToastProvider's fetch wrapper raises a WR toast if the dry-run 4xx/5xxs.
     const dryRes = await fetch(`/api/templates/campaigns/${campaign.id}/push`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ dryRun: true }),
     });
+    if (!dryRes.ok) return;
     const dry = await dryRes.json();
-    if (!dryRes.ok) return alert(dry.error || "Dry-run failed");
-    if (!confirm(`Push qualified prospects to SiteLaunchr?\n${JSON.stringify(dry, null, 2)}`)) return;
-    setActionBusy(true);
-    try {
-      const res = await fetch(`/api/templates/campaigns/${campaign.id}/push`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Push failed");
-      alert("Push dispatched.");
-      load();
-    } catch (e) {
-      alert(String(e instanceof Error ? e.message : e));
-    } finally {
-      setActionBusy(false);
-    }
+    setConfirmCfg({
+      title: "Push qualified to SiteLaunchr?",
+      message: "Every qualified prospect in this campaign will be dispatched to SiteLaunchr to build.",
+      detail: `${dry.recordCount} qualified prospect(s) → SiteLaunchr`,
+      confirmLabel: "Push to SL",
+      onConfirm: async () => {
+        setActionBusy(true);
+        try {
+          const res = await fetch(`/api/templates/campaigns/${campaign.id}/push`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          if (!res.ok) return;
+          const json = await res.json();
+          success("Pushed to SiteLaunchr", `${json.recordCount ?? dry.recordCount} build(s) queued — track them on the Builds page.`);
+          load();
+        } finally {
+          setActionBusy(false);
+        }
+      },
+    });
   }
 
   // Dispatch ONLY the checked prospects to SL (build control — pick how many /
@@ -250,26 +261,31 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ dryRun: true, prospectIds }),
     });
+    if (!dryRes.ok) return;
     const dry = await dryRes.json();
-    if (!dryRes.ok) return alert(dry.error || "Dry-run failed");
-    if (!confirm(`Build ${dry.recordCount} of ${prospectIds.length} selected in SiteLaunchr?`)) return;
-    setActionBusy(true);
-    try {
-      const res = await fetch(`/api/templates/campaigns/${campaign.id}/push`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prospectIds }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Build failed");
-      alert(`Dispatched ${json.recordCount ?? prospectIds.length} build(s) to SiteLaunchr.`);
-      setSelected(new Set());
-      load();
-    } catch (e) {
-      alert(String(e instanceof Error ? e.message : e));
-    } finally {
-      setActionBusy(false);
-    }
+    setConfirmCfg({
+      title: "Build selected in SiteLaunchr?",
+      message: "Only the prospects you checked will be dispatched to SiteLaunchr to build — this is how you control how many and which ones go out.",
+      detail: `${dry.recordCount} of ${prospectIds.length} selected → SiteLaunchr`,
+      confirmLabel: "Build now",
+      onConfirm: async () => {
+        setActionBusy(true);
+        try {
+          const res = await fetch(`/api/templates/campaigns/${campaign.id}/push`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ prospectIds }),
+          });
+          if (!res.ok) return;
+          const json = await res.json();
+          success("Dispatched to SiteLaunchr", `${json.recordCount ?? prospectIds.length} build(s) queued — track them on the Builds page.`);
+          setSelected(new Set());
+          load();
+        } finally {
+          setActionBusy(false);
+        }
+      },
+    });
   }
 
   // Changing any filter must jump back to page 0 — staying on a deep page of a
@@ -292,6 +308,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "6px 0 18px" }}>
         <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "1.75rem", fontWeight: 700 }}>{campaign.industry_slug || campaign.name || "Campaign"}</h1>
         <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/admin/templates/builds" style={ghostBtn}>Builds →</Link>
           <button onClick={exportCsv} style={ghostBtn}>Export CSV</button>
           <button onClick={pushCampaign} disabled={actionBusy} style={primaryBtn}>Push qualified → SL</button>
         </div>
@@ -421,6 +438,8 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
           onSaved={() => { setOpenId(null); load(); }}
         />
       )}
+
+      {confirmCfg && <ConfirmDialog config={confirmCfg} onClose={() => setConfirmCfg(null)} />}
     </div>
   );
 }

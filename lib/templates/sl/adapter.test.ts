@@ -60,6 +60,34 @@ describe("pushBuilds — post transport", () => {
     expect(out.results[0]).toMatchObject({ ok: true, build_id: "b-r" });
   });
 
+  it("threads retry:true into the signed body when ctx.retry is set (re-arm a failed build)", async () => {
+    const sent: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, opts: { body: string }) => {
+        sent.push(JSON.parse(opts.body));
+        return new Response(JSON.stringify({ build_id: "b-z", status: "queued", retried: true }), { status: 202 });
+      }) as never,
+    );
+    const out = await pushBuilds([builds[0]], { transport: "post", buildUrl: "https://x", apiKey: "k", hmacSecret: "s", retry: true });
+    expect(sent[0].retry).toBe(true);
+    expect(sent[0].external_id).toBe("wr-tpl-0");
+    expect(out.results[0]).toMatchObject({ ok: true, build_id: "b-z" });
+  });
+
+  it("omits retry from the body by default", async () => {
+    const sent: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, opts: { body: string }) => {
+        sent.push(JSON.parse(opts.body));
+        return new Response(JSON.stringify({ build_id: "b-n", status: "queued" }), { status: 202 });
+      }) as never,
+    );
+    await pushBuilds([builds[0]], { transport: "post", buildUrl: "https://x", apiKey: "k", hmacSecret: "s" });
+    expect(sent[0].retry).toBeUndefined();
+  });
+
   it("requires api key + secret + url for the post transport", async () => {
     await expect(pushBuilds([builds[0]], { transport: "post", buildUrl: "https://x", hmacSecret: "s" })).rejects.toThrow(
       /SL_TEMPLATE_API_KEY/,

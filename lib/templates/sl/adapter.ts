@@ -30,6 +30,12 @@ export interface PushContext {
   apiKey?: string;
   hmacSecret?: string;
   maxRetries?: number;
+  /**
+   * Re-arm a terminally-`failed` build in place: sends `retry: true` in the body,
+   * which makes SL reset the SAME build_id instead of returning the deduped
+   * {duplicate, failed}. Used by the rebuild path; mirrors dispatch-one --retry.
+   */
+  retry?: boolean;
   // table transport
   db?: SupabaseClient;
   batchRowId?: string;
@@ -49,9 +55,11 @@ async function postBuild(
   apiKey: string,
   secret: string,
   maxRetries: number,
+  retry = false,
 ): Promise<BuildResult> {
   // Serialize ONCE — the signed bytes must match the sent bytes exactly.
-  const rawBody = JSON.stringify(payload);
+  // `retry: true` re-arms a failed build in place (same build_id) on SL's side.
+  const rawBody = JSON.stringify(retry ? { ...payload, retry: true } : payload);
 
   for (let attempt = 0; ; attempt++) {
     const timestamp = String(Math.floor(Date.now() / 1000));
@@ -132,7 +140,7 @@ export async function pushBuilds(builds: BuildPayload[], ctx: PushContext = {}):
   const maxRetries = ctx.maxRetries ?? 3;
   const results: BuildResult[] = [];
   for (const build of builds) {
-    results.push(await postBuild(url, build, apiKey, secret, maxRetries));
+    results.push(await postBuild(url, build, apiKey, secret, maxRetries, ctx.retry));
   }
   return { transport, results };
 }

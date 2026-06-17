@@ -27,12 +27,22 @@ export default async function SalesPage() {
   // tpl_prospects (lookup_count/last_looked_up_at when someone looks the business
   // up on /join, click_count/last_clicked_at when they open the preview site).
   // These replace the old per-mailing QR-scan signal.
-  const { data } = await db
-    .from("tpl_prospects")
-    .select("id, business_name, city, state, phone, website, stage, agent_id, preview_url, call_count, last_called_at, lookup_count, last_looked_up_at, click_count, last_clicked_at")
-    .in("stage", BOARD_STAGES)
-    .order("updated_at", { ascending: false })
-    .limit(500);
+  const [{ data }, { data: campRows }] = await Promise.all([
+    db
+      .from("tpl_prospects")
+      .select("id, business_name, city, state, phone, website, stage, agent_id, preview_url, call_count, last_called_at, lookup_count, last_looked_up_at, click_count, last_clicked_at, sold_at, campaign_id")
+      .in("stage", BOARD_STAGES)
+      .order("updated_at", { ascending: false })
+      .limit(500),
+    db.from("tpl_campaigns").select("id, industry_slug").order("created_at", { ascending: false }),
+  ]);
+
+  // Campaigns are per-industry, so the campaign filter doubles as the industry
+  // filter (label = industry slug).
+  const campaigns = ((campRows ?? []) as { id: string; industry_slug: string }[]).map((c) => ({
+    id: c.id,
+    label: c.industry_slug || c.id.slice(0, 8),
+  }));
 
   const prospects: SalesProspect[] = ((data ?? []) as Record<string, unknown>[]).map((p) => {
     return {
@@ -51,13 +61,15 @@ export default async function SalesPage() {
       last_clicked_at: (p.last_clicked_at as string) ?? null,
       call_count: (p.call_count as number) ?? 0,
       last_called_at: (p.last_called_at as string) ?? null,
+      sold_at: (p.sold_at as string) ?? null,
+      campaign_id: (p.campaign_id as string) ?? null,
     };
   });
 
   return (
     <div style={{ minHeight: "100vh", background: "#faf9f5", padding: "32px 24px 80px" }}>
       <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-        <SalesBoard prospects={prospects} userEmail={user.email ?? ""} stages={SELECTABLE_STAGES} />
+        <SalesBoard prospects={prospects} userEmail={user.email ?? ""} stages={SELECTABLE_STAGES} campaigns={campaigns} />
       </div>
     </div>
   );

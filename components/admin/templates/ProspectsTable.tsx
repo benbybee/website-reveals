@@ -55,6 +55,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openId, setOpenId] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
+  const [reps, setReps] = useState<{ id: string; first_name: string; last_name: string | null }[]>([]);
   // Monotonic fetch token: rapid filter/page changes overlap requests, and an
   // older response landing last would otherwise overwrite the newer one.
   const fetchSeq = useRef(0);
@@ -84,6 +85,14 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
   }, [campaign.id, page, stageFilter, websiteFilter, missingFilter, dnaFilter, addressFilter, siteFilter, exportedFilter]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Active reps for the "Assign rep" dropdown (sets tpl_prospects.sales_rep_id).
+  useEffect(() => {
+    fetch("/api/admin/sales-reps")
+      .then((r) => r.json())
+      .then((j) => setReps((j.reps ?? []).filter((r: { active: boolean }) => r.active)))
+      .catch(() => {});
+  }, []);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -129,22 +138,22 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
     }
   }
 
-  async function assignAgent() {
+  async function assignRep(repId: string) {
     const ids = [...selected];
-    if (ids.length === 0) return;
-    const agent = prompt("Assign to agent (email or id):");
-    if (!agent) return;
+    if (ids.length === 0 || !repId) return;
     setActionBusy(true);
     try {
-      await Promise.all(ids.map((id) =>
-        fetch(`/api/templates/prospects/${id}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ agent_id: agent }),
-        }),
-      ));
+      const res = await fetch(`/api/templates/prospects/bulk`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ids, sales_rep_id: repId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Assign failed");
       setSelected(new Set());
       load();
+    } catch (e) {
+      alert(String(e instanceof Error ? e.message : e));
     } finally {
       setActionBusy(false);
     }
@@ -332,7 +341,18 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
           <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size} selected</span>
           <button onClick={() => estimateAndRun("deep-audit")} disabled={actionBusy} style={ghostBtn}>Run deep audit</button>
           <button onClick={() => estimateAndRun("backfill")} disabled={actionBusy} style={ghostBtn}>Backfill</button>
-          <button onClick={assignAgent} disabled={actionBusy} style={ghostBtn}>Assign agent</button>
+          <select
+            value=""
+            disabled={actionBusy || reps.length === 0}
+            onChange={(e) => assignRep(e.target.value)}
+            style={{ ...ghostBtn, cursor: "pointer" }}
+            title={reps.length === 0 ? "No active reps — add one at /admin/sales-reps" : "Assign selected to a rep"}
+          >
+            <option value="">Assign rep…</option>
+            {reps.map((r) => (
+              <option key={r.id} value={r.id}>{r.first_name}{r.last_name ? ` ${r.last_name}` : ""}</option>
+            ))}
+          </select>
           <button onClick={approveForSL} disabled={actionBusy} style={ghostBtn}>Approve for SL</button>
           <button onClick={buildSelected} disabled={actionBusy} style={primaryBtn}>Build selected → SL</button>
           <button onClick={() => bulkMail({ mail_ready: true })} disabled={actionBusy} style={ghostBtn}>Mark mail-ready</button>

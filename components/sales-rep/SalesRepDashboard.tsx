@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 type Session = {
   token: string;
@@ -30,7 +31,20 @@ type Task = Record<string, unknown> & {
   client?: { id: string; first_name: string; last_name: string; company_name: string; email: string } | null;
 };
 
-type Tab = "submissions" | "clients" | "tasks";
+type TemplateLead = {
+  id: string;
+  business_name: string | null;
+  city: string | null;
+  state: string | null;
+  phone: string | null;
+  stage: string;
+  preview_url: string | null;
+  lookup_count: number;
+  click_count: number;
+  sold_at: string | null;
+};
+
+type Tab = "leads" | "submissions" | "clients" | "tasks";
 
 const STATUS_COLORS: Record<string, string> = {
   backlog: "#888886",
@@ -58,15 +72,18 @@ export function SalesRepDashboard({
   sessions,
   clients,
   tasks,
+  templateLeads = [],
 }: {
   rep: { first_name: string; last_name: string | null; email: string };
   sessions: Session[];
   clients: Client[];
   tasks: Task[];
+  templateLeads?: TemplateLead[];
 }) {
-  const [tab, setTab] = useState<Tab>("submissions");
+  const [tab, setTab] = useState<Tab>(templateLeads.length > 0 ? "leads" : "submissions");
 
   const tabCounts = {
+    leads: templateLeads.length,
     submissions: sessions.length,
     clients: clients.length,
     tasks: tasks.length,
@@ -88,7 +105,7 @@ export function SalesRepDashboard({
       </div>
 
       <div style={tabsRow}>
-        {(["submissions", "clients", "tasks"] as Tab[]).map((t) => (
+        {(["leads", "submissions", "clients", "tasks"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -98,15 +115,93 @@ export function SalesRepDashboard({
               borderBottom: tab === t ? "2px solid #ff3d00" : "2px solid transparent",
             }}
           >
-            {t} <span style={{ color: "#888886", fontWeight: 400 }}>({tabCounts[t]})</span>
+            {t === "leads" ? "my leads" : t} <span style={{ color: "#888886", fontWeight: 400 }}>({tabCounts[t]})</span>
           </button>
         ))}
       </div>
 
+      {tab === "leads" && <LeadsTab leads={templateLeads} />}
       {tab === "submissions" && <SubmissionsTab sessions={sessions} />}
       {tab === "clients" && <ClientsTab clients={clients} />}
       {tab === "tasks" && <TasksTab tasks={tasks} />}
     </>
+  );
+}
+
+/**
+ * Read-only board of the rep's assigned template leads with engagement signals.
+ * The rep can flag a lead "sold" (the operator converts later) but cannot change
+ * stage or convert — those stay admin-only.
+ */
+function LeadsTab({ leads }: { leads: TemplateLead[] }) {
+  const router = useRouter();
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function toggleSold(lead: TemplateLead) {
+    setBusyId(lead.id);
+    try {
+      const res = await fetch(`/api/sales-rep/template-leads/${lead.id}/sold`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sold: !lead.sold_at }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || `HTTP ${res.status}`);
+      }
+      router.refresh();
+    } catch (e) {
+      alert(String(e instanceof Error ? e.message : e));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (leads.length === 0) {
+    return <EmptyState message="No leads assigned to you yet. Your admin assigns leads on the campaign board." />;
+  }
+  return (
+    <div style={cardStyle}>
+      <table style={tableStyle}>
+        <thead>
+          <tr>
+            <th style={th}>Business</th>
+            <th style={th}>Location</th>
+            <th style={th}>Looked up</th>
+            <th style={th}>Opened</th>
+            <th style={th}>Site</th>
+            <th style={th} />
+          </tr>
+        </thead>
+        <tbody>
+          {leads.map((l) => (
+            <tr key={l.id} style={l.sold_at ? { background: "#f0f7f0" } : undefined}>
+              <td style={td}>
+                <span style={{ fontWeight: 600 }}>{l.business_name || "—"}</span>
+                {l.phone && <span style={{ display: "block", fontSize: 12, color: "#888886" }}>{l.phone}</span>}
+              </td>
+              <td style={td}>{[l.city, l.state].filter(Boolean).join(", ") || "—"}</td>
+              <td style={td}>{l.lookup_count > 0 ? `🔍 ${l.lookup_count}` : "—"}</td>
+              <td style={td}>{l.click_count > 0 ? `▶ ${l.click_count}` : "—"}</td>
+              <td style={td}>
+                {l.preview_url ? (
+                  <a href={l.preview_url} target="_blank" rel="noreferrer" style={{ color: "#0a4a7a", fontSize: 12 }}>view →</a>
+                ) : (
+                  <span style={{ color: "#bbb", fontSize: 12 }}>not yet</span>
+                )}
+              </td>
+              <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+                {l.sold_at ? (
+                  <button onClick={() => toggleSold(l)} disabled={busyId === l.id} style={notNeededBtnStyle}>✓ Sold — undo</button>
+                ) : (
+                  <button onClick={() => toggleSold(l)} disabled={busyId === l.id} style={soldBtnStyle}>Mark sold</button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

@@ -1,5 +1,42 @@
 import { createServerClient } from "@/lib/supabase/server";
+import { tplDb } from "@/lib/templates/db";
 import { hashPin } from "@/lib/pin";
+
+export interface RepTemplateLead {
+  id: string;
+  source_id: string;
+  business_name: string | null;
+  city: string | null;
+  state: string | null;
+  phone: string | null;
+  stage: string;
+  preview_url: string | null;
+  lookup_count: number;
+  last_looked_up_at: string | null;
+  click_count: number;
+  last_clicked_at: string | null;
+  sold_at: string | null;
+}
+
+/**
+ * Template-pipeline leads (tpl_prospects) assigned to a rep, for the rep portal.
+ * Uses the service-role client (tpl_* is service-role RLS). Most-engaged first.
+ */
+export async function getTemplateLeadsForRep(repId: string): Promise<RepTemplateLead[]> {
+  const { data, error } = await tplDb()
+    .from("tpl_prospects")
+    .select(
+      "id, source_id, business_name, city, state, phone, stage, preview_url, lookup_count, last_looked_up_at, click_count, last_clicked_at, sold_at",
+    )
+    .eq("sales_rep_id", repId)
+    .order("click_count", { ascending: false })
+    .order("last_clicked_at", { ascending: false, nullsFirst: false });
+  if (error) {
+    console.error("[sales-reps] getTemplateLeadsForRep failed:", error.message);
+    return [];
+  }
+  return (data || []) as RepTemplateLead[];
+}
 
 export interface SalesRep {
   id: string;

@@ -21,17 +21,40 @@ export interface SalesProspect {
   last_clicked_at: string | null;
   call_count: number;
   last_called_at: string | null;
+  sold_at: string | null;
+  campaign_id: string | null;
 }
 
-export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesProspect[]; userEmail: string; stages: string[] }) {
+export function SalesBoard({
+  prospects,
+  userEmail,
+  stages,
+  campaigns = [],
+}: {
+  prospects: SalesProspect[];
+  userEmail: string;
+  stages: string[];
+  campaigns?: { id: string; label: string }[];
+}) {
   const router = useRouter();
   const [mineOnly, setMineOnly] = useState(false);
   const [engagedFirst, setEngagedFirst] = useState(false);
+  const [campaignFilter, setCampaignFilter] = useState("");
+  const [soldFilter, setSoldFilter] = useState(""); // "" | "sold" | "unsold"
+  const [engagementFilter, setEngagementFilter] = useState(""); // "" | "looked_up" | "opened"
   const [busyId, setBusyId] = useState<string | null>(null);
   const [convertFor, setConvertFor] = useState<SalesProspect | null>(null);
   const [callFor, setCallFor] = useState<SalesProspect | null>(null);
 
-  const filtered = mineOnly ? prospects.filter((p) => p.agent_id === userEmail) : prospects;
+  const filtered = prospects.filter((p) => {
+    if (mineOnly && p.agent_id !== userEmail) return false;
+    if (campaignFilter && p.campaign_id !== campaignFilter) return false;
+    if (soldFilter === "sold" && !p.sold_at) return false;
+    if (soldFilter === "unsold" && p.sold_at) return false;
+    if (engagementFilter === "looked_up" && p.lookup_count <= 0) return false;
+    if (engagementFilter === "opened" && p.click_count <= 0) return false;
+    return true;
+  });
   // "Engaged first" surfaces the prospects most likely to convert — those who
   // opened their preview site. Sort by click_count desc, then most-recent click.
   const visible = engagedFirst
@@ -70,7 +93,25 @@ export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesP
           </label>
         </div>
       </div>
-      <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "1.75rem", fontWeight: 700, marginBottom: 18 }}>Sales board</h1>
+      <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "1.75rem", fontWeight: 700, marginBottom: 14 }}>Sales board</h1>
+
+      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+        <select value={campaignFilter} onChange={(e) => setCampaignFilter(e.target.value)} style={filterSel}>
+          <option value="">All campaigns / industries</option>
+          {campaigns.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select>
+        <select value={soldFilter} onChange={(e) => setSoldFilter(e.target.value)} style={filterSel}>
+          <option value="">Any sold status</option>
+          <option value="sold">Sold</option>
+          <option value="unsold">Not sold</option>
+        </select>
+        <select value={engagementFilter} onChange={(e) => setEngagementFilter(e.target.value)} style={filterSel}>
+          <option value="">Any engagement</option>
+          <option value="looked_up">Looked up</option>
+          <option value="opened">Opened site</option>
+        </select>
+        <span style={{ fontSize: 12, color: "#888886", alignSelf: "center" }}>{visible.length} shown</span>
+      </div>
 
       <div style={{ background: "#fff", border: "1.5px solid #e8e6df", borderRadius: 6, overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "var(--font-sans)" }}>
@@ -92,7 +133,10 @@ export function SalesBoard({ prospects, userEmail, stages }: { prospects: SalesP
             {visible.length === 0 && <tr><td colSpan={10} style={{ ...td, textAlign: "center", color: "#888886", padding: 28 }}>No prospects in the sales funnel.</td></tr>}
             {visible.map((p) => (
               <tr key={p.id} style={{ borderTop: "1px solid #f0eeea" }}>
-                <td style={td}><span style={{ fontWeight: 600, color: "#111110" }}>{p.business_name || "—"}</span></td>
+                <td style={td}>
+                  <span style={{ fontWeight: 600, color: "#111110" }}>{p.business_name || "—"}</span>
+                  {p.sold_at && <span style={{ marginLeft: 8, fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "#fff", background: "#1a7a3a", padding: "2px 6px", borderRadius: 3, textTransform: "uppercase" }}>sold</span>}
+                </td>
                 <td style={{ ...td, color: "#555553" }}>{[p.city, p.state].filter(Boolean).join(", ") || "—"}</td>
                 <td style={td}>
                   {p.phone ? <a href={`tel:${p.phone}`} style={{ color: "#ff3d00", textDecoration: "none", fontFamily: "var(--font-mono)", fontSize: 12 }}>{p.phone}</a> : <span style={{ color: "#bbb" }}>—</span>}
@@ -370,6 +414,7 @@ function ConvertModal({
   );
 }
 
+const filterSel: React.CSSProperties = { padding: "6px 10px", border: "1.5px solid #d8d6cf", borderRadius: 4, fontSize: 13, fontFamily: "var(--font-sans)", background: "#fff", color: "#333", cursor: "pointer" };
 const th: React.CSSProperties = { padding: "9px 12px", textAlign: "left", fontFamily: "var(--font-mono)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "#555553", fontWeight: 600 };
 const td: React.CSSProperties = { padding: "10px 12px", fontSize: 13, verticalAlign: "middle" };
 const ghostBtn: React.CSSProperties = { fontFamily: "var(--font-sans)", fontSize: 12, fontWeight: 500, color: "#555553", background: "#fff", border: "1.5px solid #d8d6cf", borderRadius: 4, padding: "5px 10px", cursor: "pointer" };

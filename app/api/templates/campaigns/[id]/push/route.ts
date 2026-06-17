@@ -6,6 +6,8 @@ import { assembleAndPush } from "@/lib/templates/sl/push";
 
 interface PushBody {
   dryRun?: boolean;
+  /** Selected prospects to dispatch (by tpl_prospects.id). Omit to push all qualified. */
+  prospectIds?: string[];
 }
 
 /** Task 8.8 — assemble a campaign's qualified prospects and push to SL. */
@@ -33,6 +35,7 @@ export async function POST(
     const result = await assembleAndPush(tplDb(), id, {
       dryRun: body.dryRun === true,
       transport,
+      prospectIds: Array.isArray(body.prospectIds) && body.prospectIds.length > 0 ? body.prospectIds : undefined,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {

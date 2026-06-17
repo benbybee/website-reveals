@@ -166,6 +166,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (page.length < PAGE) break;
     lastId = page[page.length - 1].id;
   }
+
+  // Stamp these rows as exported so the operator can filter exported vs not
+  // (e.g. hand only the not-yet-exported batch to Click2Mail). Chunked to stay
+  // under PostgREST's URL length limit on large campaigns.
+  if (rows.length > 0) {
+    const exportedAt = new Date().toISOString();
+    const ids = rows.map((r) => r.id);
+    for (let i = 0; i < ids.length; i += 500) {
+      await db.from("tpl_prospects").update({ exported_at: exportedAt }).in("id", ids.slice(i, i + 500));
+    }
+  }
+
   const header = fields.map(csvCell).join(",");
   const body = rows.map((r) => fields.map((f) => csvCell(valueFor(f, r))).join(",")).join("\r\n");
   const csv = `${header}\r\n${body}`;

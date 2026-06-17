@@ -95,6 +95,27 @@ describe("applyProspectFilters", () => {
     ]);
   });
 
+  it("site=has requires a generated preview_url (neq '')", () => {
+    const { q, calls } = stub();
+    applyProspectFilters(q, params({ site: "has" }));
+    expect(calls).toEqual([{ method: "neq", args: ["preview_url", ""] }]);
+  });
+
+  it("site=missing matches null/empty preview_url via one or-group", () => {
+    const { q, calls } = stub();
+    applyProspectFilters(q, params({ site: "missing" }));
+    expect(calls).toEqual([{ method: "or", args: ['preview_url.is.null,preview_url.eq.""'] }]);
+  });
+
+  it("exported=yes|no map to exported_at null checks", () => {
+    const yes = stub();
+    applyProspectFilters(yes.q, params({ exported: "yes" }));
+    expect(yes.calls).toEqual([{ method: "or", args: ["exported_at.not.is.null"] }]);
+    const no = stub();
+    applyProspectFilters(no.q, params({ exported: "no" }));
+    expect(no.calls).toEqual([{ method: "or", args: ["exported_at.is.null"] }]);
+  });
+
   it("ignores unknown dna/address values instead of erroring", () => {
     const { q, calls } = stub();
     applyProspectFilters(q, params({ dna: "bogus", address: "" }));

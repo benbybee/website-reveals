@@ -67,5 +67,19 @@ export function applyProspectFilters<Q extends ProspectFilterable<Q>>(
   if (address === "has") for (const p of ADDRESS_PATHS) query = query.neq(p, "");
   else if (address === "missing") query = query.or(ADDRESS_MISSING_OR);
 
+  // site=has|missing — whether a speculative site (preview_url) has been
+  // generated. preview_url is the promoted column (set by the SL callback /
+  // reconcile); it's never "", so neq "" == "has a generated URL".
+  const site = sp.get("site");
+  if (site === "has") query = query.neq("preview_url", "");
+  else if (site === "missing") query = query.or('preview_url.is.null,preview_url.eq.""');
+
+  // exported=yes|no — whether the lead has been included in a CSV export
+  // (exported_at stamped). Lets the operator hand only the not-yet-exported
+  // batch to Click2Mail.
+  const exported = sp.get("exported");
+  if (exported === "yes") query = query.or("exported_at.not.is.null");
+  else if (exported === "no") query = query.or("exported_at.is.null");
+
   return query;
 }

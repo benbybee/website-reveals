@@ -20,12 +20,19 @@ export interface AssembleOptions {
   dryRun?: boolean;
   batchId?: string;
   transport?: "post" | "table";
+  /**
+   * When set, dispatch exactly these prospects (by tpl_prospects.id) regardless
+   * of stage — the operator selected them in the CRM. When omitted, falls back
+   * to the campaign-wide "all qualified" behavior.
+   */
+  prospectIds?: string[];
 }
 
 /**
- * Load a campaign's `qualified` prospects, map them to SL per-build payloads,
- * create a tpl_sl_batches row, and either dry-run (validate + persist, no send)
- * or dispatch one POST per build via the transport adapter.
+ * Map prospects → SL per-build payloads, create a tpl_sl_batches row, and either
+ * dry-run (validate + persist, no send) or dispatch one POST per build via the
+ * transport adapter. Targets the explicit `sourceIds` if given, else every
+ * `qualified` prospect in the campaign.
  */
 export async function assembleAndPush(
   db: SupabaseClient,
@@ -35,12 +42,12 @@ export async function assembleAndPush(
   const { dryRun = false } = opts;
   const batchId = opts.batchId ?? `tpl-${campaignId}-${Date.now()}`;
 
-  const { data, error } = await db
-    .from("tpl_prospects")
-    .select("record")
-    .eq("campaign_id", campaignId)
-    .eq("stage", "qualified");
-  if (error) throw new Error(`failed loading qualified prospects: ${error.message}`);
+  let q = db.from("tpl_prospects").select("record").eq("campaign_id", campaignId);
+  q = opts.prospectIds && opts.prospectIds.length > 0
+    ? q.in("id", opts.prospectIds)
+    : q.eq("stage", "qualified");
+  const { data, error } = await q;
+  if (error) throw new Error(`failed loading prospects to push: ${error.message}`);
 
   const records = ((data ?? []) as { record: CanonicalRecord }[]).map((r) => r.record);
   const builds = buildPayloads(records);

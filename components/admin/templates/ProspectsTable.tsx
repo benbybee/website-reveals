@@ -50,6 +50,8 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
   const [missingFilter, setMissingFilter] = useState("");
   const [dnaFilter, setDnaFilter] = useState("");
   const [addressFilter, setAddressFilter] = useState("");
+  const [siteFilter, setSiteFilter] = useState("");
+  const [exportedFilter, setExportedFilter] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openId, setOpenId] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
@@ -66,6 +68,8 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
     if (missingFilter) sp.set("missing", missingFilter);
     if (dnaFilter) sp.set("dna", dnaFilter);
     if (addressFilter) sp.set("address", addressFilter);
+    if (siteFilter) sp.set("site", siteFilter);
+    if (exportedFilter) sp.set("exported", exportedFilter);
     try {
       const res = await fetch(`/api/templates/campaigns/${campaign.id}/prospects?${sp}`);
       const json = await res.json();
@@ -77,7 +81,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
     } finally {
       if (seq === fetchSeq.current) setLoading(false);
     }
-  }, [campaign.id, page, stageFilter, websiteFilter, missingFilter, dnaFilter, addressFilter]);
+  }, [campaign.id, page, stageFilter, websiteFilter, missingFilter, dnaFilter, addressFilter, siteFilter, exportedFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -193,6 +197,8 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
     if (missingFilter) sp.set("missing", missingFilter);
     if (dnaFilter) sp.set("dna", dnaFilter);
     if (addressFilter) sp.set("address", addressFilter);
+    if (siteFilter) sp.set("site", siteFilter);
+    if (exportedFilter) sp.set("exported", exportedFilter);
     const qs = sp.toString();
     window.open(`/api/templates/campaigns/${campaign.id}/export${qs ? `?${qs}` : ""}`, "_blank");
   }
@@ -216,6 +222,39 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Push failed");
       alert("Push dispatched.");
+      load();
+    } catch (e) {
+      alert(String(e instanceof Error ? e.message : e));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  // Dispatch ONLY the checked prospects to SL (build control — pick how many /
+  // which ones). Sends prospect ids; the push route resolves + dispatches them
+  // regardless of stage. Dry-runs first to show the count.
+  async function buildSelected() {
+    const prospectIds = [...selected];
+    if (prospectIds.length === 0) return;
+    const dryRes = await fetch(`/api/templates/campaigns/${campaign.id}/push`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dryRun: true, prospectIds }),
+    });
+    const dry = await dryRes.json();
+    if (!dryRes.ok) return alert(dry.error || "Dry-run failed");
+    if (!confirm(`Build ${dry.recordCount} of ${prospectIds.length} selected in SiteLaunchr?`)) return;
+    setActionBusy(true);
+    try {
+      const res = await fetch(`/api/templates/campaigns/${campaign.id}/push`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prospectIds }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Build failed");
+      alert(`Dispatched ${json.recordCount ?? prospectIds.length} build(s) to SiteLaunchr.`);
+      setSelected(new Set());
       load();
     } catch (e) {
       alert(String(e instanceof Error ? e.message : e));
@@ -274,6 +313,18 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
           placeholder="Any address"
           options={[{ value: "has", label: "has full address" }, { value: "missing", label: "missing address" }]}
         />
+        <Select
+          value={siteFilter}
+          onChange={setFilter(setSiteFilter)}
+          placeholder="Any site"
+          options={[{ value: "has", label: "site generated" }, { value: "missing", label: "no site yet" }]}
+        />
+        <Select
+          value={exportedFilter}
+          onChange={setFilter(setExportedFilter)}
+          placeholder="Any export"
+          options={[{ value: "no", label: "not exported" }, { value: "yes", label: "exported" }]}
+        />
       </div>
 
       {selected.size > 0 && (
@@ -283,6 +334,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
           <button onClick={() => estimateAndRun("backfill")} disabled={actionBusy} style={ghostBtn}>Backfill</button>
           <button onClick={assignAgent} disabled={actionBusy} style={ghostBtn}>Assign agent</button>
           <button onClick={approveForSL} disabled={actionBusy} style={ghostBtn}>Approve for SL</button>
+          <button onClick={buildSelected} disabled={actionBusy} style={primaryBtn}>Build selected → SL</button>
           <button onClick={() => bulkMail({ mail_ready: true })} disabled={actionBusy} style={ghostBtn}>Mark mail-ready</button>
           <button onClick={() => bulkMail({ do_not_mail: true })} disabled={actionBusy} style={ghostBtn}>Suppress</button>
           <button onClick={() => setSelected(new Set())} style={{ ...ghostBtn, marginLeft: "auto" }}>Clear</button>

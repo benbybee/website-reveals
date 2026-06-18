@@ -27,6 +27,7 @@ export function FindYourSite() {
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
   const [selected, setSelected] = useState<Suggestion | null>(null);
   const [zip, setZip] = useState("");
   const [zipError, setZipError] = useState(false);
@@ -71,38 +72,34 @@ export function FindYourSite() {
     return () => ctx.revert();
   }, []);
 
-  // ----- debounced name typeahead (search phase only) -----
-  useEffect(() => {
-    if (phase !== "search") return;
+  // ----- manual search: type the name, then tap Search (no live typeahead) -----
+  async function runSearch() {
     const q = query.trim();
-    if (q.length < 2) {
-      setSuggestions([]);
-      setLoading(false);
-      return;
-    }
+    if (q.length < 2) return;
     setLoading(true);
-    const ctrl = new AbortController();
-    const t = setTimeout(async () => {
-      try {
-        const r = await fetch("/api/templates/find", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ business_name: q }),
-          signal: ctrl.signal,
-        });
-        const j = (await r.json()) as { suggestions?: Suggestion[] };
-        setSuggestions(Array.isArray(j.suggestions) ? j.suggestions : []);
-      } catch {
-        /* aborted or network — ignore */
-      } finally {
-        setLoading(false);
-      }
-    }, 180);
-    return () => {
-      clearTimeout(t);
-      ctrl.abort();
-    };
-  }, [query, phase]);
+    try {
+      const r = await fetch("/api/templates/find", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ business_name: q }),
+      });
+      const j = (await r.json()) as { suggestions?: Suggestion[] };
+      const list = Array.isArray(j.suggestions) ? j.suggestions : [];
+      setSuggestions(list);
+      setSearched(true);
+      // One unambiguous match → straight to the ZIP confirmation.
+      if (list.length === 1) pick(list[0]);
+    } catch {
+      setSuggestions([]);
+      setSearched(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+  function onSearchSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    runSearch();
+  }
 
   // ----- animate suggestion list in as it changes -----
   useEffect(() => {
@@ -209,7 +206,7 @@ export function FindYourSite() {
     }
   }
 
-  const showNoMatch = phase === "search" && query.trim().length >= 2 && !loading && suggestions.length === 0;
+  const showNoMatch = phase === "search" && searched && !loading && suggestions.length === 0;
 
   return (
     <div className="fys-root" ref={rootRef}>
@@ -232,24 +229,34 @@ export function FindYourSite() {
               Claim it <span className="fys-grad">free</span>.
             </h1>
             <p className="fys-sub" data-enter>
-              Start typing your business name — we&apos;ll pull up the site we made for you.
+              Enter your business name and tap search — we&apos;ll pull up the site we made for you.
             </p>
 
-            <div className="fys-field" data-enter>
-              <SearchIcon />
-              <input
-                className="fys-input"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Your business name…"
-                aria-label="Business name"
-                autoComplete="off"
-                autoCapitalize="words"
-                enterKeyHint="search"
-                autoFocus
-              />
-              {loading && <span className="fys-spin" aria-hidden />}
-            </div>
+            <form className="fys-search-form" data-enter onSubmit={onSearchSubmit}>
+              <div className="fys-field">
+                <SearchIcon />
+                <input
+                  className="fys-input"
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    // Editing the name invalidates the last search's results.
+                    if (searched) setSearched(false);
+                    if (suggestions.length) setSuggestions([]);
+                  }}
+                  placeholder="Your business name…"
+                  aria-label="Business name"
+                  autoComplete="off"
+                  autoCapitalize="words"
+                  enterKeyHint="search"
+                  autoFocus
+                />
+                {loading && <span className="fys-spin" aria-hidden />}
+              </div>
+              <button type="submit" className="fys-cta fys-search-btn" disabled={loading || query.trim().length < 2}>
+                {loading ? "Searching…" : "Search"}
+              </button>
+            </form>
 
             <div className="fys-list" ref={listRef}>
               {suggestions.map((s) => (
@@ -426,6 +433,10 @@ const CSS = `
   font-size:17px;font-weight:500;font-family:inherit;height:100%}
 .fys-input::placeholder{color:#5B6477}
 .fys-spin{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,.18);border-top-color:#34E2A0;animation:fys-rot .7s linear infinite;flex:0 0 auto}
+
+.fys-search-form{display:flex;flex-direction:column;gap:12px}
+.fys-search-btn{width:100%}
+.fys-search-btn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
 
 .fys-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
 .fys-item{display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;

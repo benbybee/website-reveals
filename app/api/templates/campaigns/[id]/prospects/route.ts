@@ -36,7 +36,11 @@ export async function GET(
   // Shared with the CSV export so "export what you're looking at" can't drift.
   query = applyProspectFilters(query, sp);
 
-  query = query.order("created_at", { ascending: false }).range(from, to);
+  // Alphabetical by business name (id as a stable tiebreaker for paging).
+  query = query
+    .order("business_name", { ascending: true, nullsFirst: false })
+    .order("id", { ascending: true })
+    .range(from, to);
 
   const { data, error, count } = await query;
   if (error) {

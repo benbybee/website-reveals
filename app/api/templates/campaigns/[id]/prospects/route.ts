@@ -26,6 +26,29 @@ export async function GET(
   const to = from + pageSize - 1;
 
   const db = tplDb();
+
+  // idsOnly: return EVERY matching id for the current filter (not just this
+  // page), so the table's "select all N" can load the whole filtered set into
+  // its selection. Keyset-paged to clear Supabase's 1000-row select cap; capped
+  // at the bulk-action ceiling so a selection can always be acted on.
+  if (sp.get("idsOnly")) {
+    const CAP = 5000;
+    const PAGE = 1000;
+    const ids: string[] = [];
+    for (let lastId = ""; ids.length < CAP; ) {
+      let q = db.from("tpl_prospects").select("id").eq("campaign_id", id);
+      q = applyProspectFilters(q, sp);
+      if (lastId) q = q.gt("id", lastId);
+      const { data, error } = await q.order("id", { ascending: true }).limit(PAGE);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      const rows = (data ?? []) as { id: string }[];
+      ids.push(...rows.map((r) => r.id));
+      if (rows.length < PAGE) break;
+      lastId = rows[rows.length - 1].id;
+    }
+    return NextResponse.json({ ids: ids.slice(0, CAP), capped: ids.length >= CAP });
+  }
+
   // Embed the prospect's mailing (0 or 1, via the prospect_id FK) so the table
   // can show mail status + QR scan activity without a second round trip.
   let query = db

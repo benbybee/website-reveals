@@ -68,10 +68,10 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
   // older response landing last would otherwise overwrite the newer one.
   const fetchSeq = useRef(0);
 
-  const load = useCallback(async () => {
-    const seq = ++fetchSeq.current;
-    setLoading(true);
-    const sp = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+  // The active filter as query params (no paging) — shared by the list load, the
+  // CSV export, and "select all matching" so all three stay in lockstep.
+  const filterParams = useCallback(() => {
+    const sp = new URLSearchParams();
     if (stageFilter) sp.set("stage", stageFilter);
     if (websiteFilter) sp.set("website_status", websiteFilter);
     if (missingFilter) sp.set("missing", missingFilter);
@@ -79,6 +79,15 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
     if (addressFilter) sp.set("address", addressFilter);
     if (siteFilter) sp.set("site", siteFilter);
     if (exportedFilter) sp.set("exported", exportedFilter);
+    return sp;
+  }, [stageFilter, websiteFilter, missingFilter, dnaFilter, addressFilter, siteFilter, exportedFilter]);
+
+  const load = useCallback(async () => {
+    const seq = ++fetchSeq.current;
+    setLoading(true);
+    const sp = filterParams();
+    sp.set("page", String(page));
+    sp.set("pageSize", String(PAGE_SIZE));
     try {
       const res = await fetch(`/api/templates/campaigns/${campaign.id}/prospects?${sp}`);
       const json = await res.json();
@@ -90,7 +99,25 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
     } finally {
       if (seq === fetchSeq.current) setLoading(false);
     }
-  }, [campaign.id, page, stageFilter, websiteFilter, missingFilter, dnaFilter, addressFilter, siteFilter, exportedFilter]);
+  }, [campaign.id, page, filterParams]);
+
+  // Pull EVERY id matching the current filter (across all pages) into the
+  // selection — powers "select all N" so bulk actions can target the whole
+  // filtered list, not just the visible page.
+  async function selectAllMatching() {
+    setActionBusy(true);
+    try {
+      const sp = filterParams();
+      sp.set("idsOnly", "1");
+      const res = await fetch(`/api/templates/campaigns/${campaign.id}/prospects?${sp}`);
+      if (!res.ok) return;
+      const json = (await res.json()) as { ids?: string[]; capped?: boolean };
+      setSelected(new Set(json.ids ?? []));
+      if (json.capped) error("Selection capped at 5,000", "Narrow the filter to act on the rest.");
+    } finally {
+      setActionBusy(false);
+    }
+  }
 
   useEffect(() => { load(); }, [load]);
 
@@ -110,7 +137,14 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
     });
   }
   function toggleAll() {
-    setSelected((prev) => (prev.size === prospects.length ? new Set() : new Set(prospects.map((p) => p.id))));
+    setSelected((prev) => {
+      // Unchecking (page already fully selected) clears the WHOLE selection,
+      // including any "select all matching" set; otherwise add this page's ids.
+      if (prospects.length > 0 && prospects.every((p) => prev.has(p.id))) return new Set();
+      const next = new Set(prev);
+      prospects.forEach((p) => next.add(p.id));
+      return next;
+    });
   }
 
   async function estimateAndRun(kind: "deep-audit" | "backfill") {
@@ -234,15 +268,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
   }
 
   function exportCsv() {
-    const sp = new URLSearchParams();
-    if (stageFilter) sp.set("stage", stageFilter);
-    if (websiteFilter) sp.set("website_status", websiteFilter);
-    if (missingFilter) sp.set("missing", missingFilter);
-    if (dnaFilter) sp.set("dna", dnaFilter);
-    if (addressFilter) sp.set("address", addressFilter);
-    if (siteFilter) sp.set("site", siteFilter);
-    if (exportedFilter) sp.set("exported", exportedFilter);
-    const qs = sp.toString();
+    const qs = filterParams().toString();
     window.open(`/api/templates/campaigns/${campaign.id}/export${qs ? `?${qs}` : ""}`, "_blank");
   }
 
@@ -337,6 +363,8 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
   }
 
   const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
+  const pageAllSelected = prospects.length > 0 && prospects.every((p) => selected.has(p.id));
+  const allMatchingSelected = pageAllSelected && total > 0 && selected.size >= total;
 
   return (
     <div>
@@ -416,11 +444,31 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
         </div>
       )}
 
+      {/* Cross-page select-all: appears once the whole visible page is selected
+          and the filter has more rows than fit on this page. */}
+      {pageAllSelected && total > prospects.length && (
+        <div style={selectAllBar}>
+          {allMatchingSelected ? (
+            <span>
+              All <strong>{total.toLocaleString()}</strong> leads in this filter are selected.{" "}
+              <button onClick={() => setSelected(new Set())} style={linkBtn}>Clear selection</button>
+            </span>
+          ) : (
+            <span>
+              All <strong>{prospects.length}</strong> on this page are selected.{" "}
+              <button onClick={selectAllMatching} disabled={actionBusy} style={linkBtn}>
+                Select all {total.toLocaleString()} in this filter
+              </button>
+            </span>
+          )}
+        </div>
+      )}
+
       <div style={{ background: "#fff", border: "1.5px solid #e8e6df", borderRadius: 6, overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: "var(--font-sans)" }}>
           <thead>
             <tr style={{ background: "#f5f4ef", borderBottom: "1.5px solid #e8e6df" }}>
-              <th style={{ ...th, width: 36 }}><input type="checkbox" checked={selected.size === prospects.length && prospects.length > 0} onChange={toggleAll} /></th>
+              <th style={{ ...th, width: 36 }}><input type="checkbox" checked={pageAllSelected} onChange={toggleAll} /></th>
               <th style={th}>Business</th>
               <th style={th}>Location</th>
               <th style={{ ...th, textAlign: "center" }}>Site</th>
@@ -609,4 +657,6 @@ const td: React.CSSProperties = { padding: "10px 12px", fontSize: 13, verticalAl
 const primaryBtn: React.CSSProperties = { fontFamily: "var(--font-sans)", fontSize: 13, fontWeight: 600, color: "#fff", background: "#ff3d00", border: "none", borderRadius: 4, padding: "8px 16px", cursor: "pointer" };
 const ghostBtn: React.CSSProperties = { fontFamily: "var(--font-sans)", fontSize: 12, fontWeight: 500, color: "#555553", background: "#fff", border: "1.5px solid #d8d6cf", borderRadius: 4, padding: "6px 12px", cursor: "pointer" };
 const suppressBtn: React.CSSProperties = { fontFamily: "var(--font-sans)", fontSize: 12, fontWeight: 600, color: "#b3300a", background: "#fff", border: "1.5px solid #f3c0b8", borderRadius: 4, padding: "6px 12px", cursor: "pointer" };
+const selectAllBar: React.CSSProperties = { background: "#fff8e6", border: "1.5px solid #f0e0a8", borderRadius: 6, padding: "8px 14px", marginBottom: 10, fontSize: 13, color: "#5a4a00", textAlign: "center" };
+const linkBtn: React.CSSProperties = { background: "none", border: "none", color: "#0a4a7a", fontWeight: 700, fontSize: 13, cursor: "pointer", textDecoration: "underline", fontFamily: "inherit", padding: 0 };
 const actionBar: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10, background: "#fff6f3", border: "1.5px solid #ffcdc0", borderRadius: 6, padding: "10px 14px", marginBottom: 14 };

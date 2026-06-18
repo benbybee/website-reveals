@@ -27,15 +27,17 @@ export default async function SalesPage() {
   // tpl_prospects (lookup_count/last_looked_up_at when someone looks the business
   // up on /join, click_count/last_clicked_at when they open the preview site).
   // These replace the old per-mailing QR-scan signal.
-  const [{ data }, { data: campRows }] = await Promise.all([
+  const [{ data }, { data: campRows }, { data: repRows }] = await Promise.all([
     db
       .from("tpl_prospects")
-      .select("id, business_name, city, state, phone, website, stage, agent_id, preview_url, call_count, last_called_at, lookup_count, last_looked_up_at, click_count, last_clicked_at, sold_at, campaign_id")
+      .select("id, business_name, city, state, phone, website, stage, agent_id, sales_rep_id, preview_url, call_count, last_called_at, lookup_count, last_looked_up_at, click_count, last_clicked_at, sold_at, campaign_id")
       .in("stage", BOARD_STAGES)
       .is("suppressed_at", null) // suppressed leads are off the sales board too
+      .neq("preview_url", "") // only leads whose site is generated — those are the ones reps call
       .order("updated_at", { ascending: false })
       .limit(500),
     db.from("tpl_campaigns").select("id, industry_slug").order("created_at", { ascending: false }),
+    db.from("sales_reps").select("id, first_name, last_name"),
   ]);
 
   // Campaigns are per-industry, so the campaign filter doubles as the industry
@@ -43,6 +45,13 @@ export default async function SalesPage() {
   const campaigns = ((campRows ?? []) as { id: string; industry_slug: string }[]).map((c) => ({
     id: c.id,
     label: c.industry_slug || c.id.slice(0, 8),
+  }));
+
+  // Resolve the assigned-rep id (sales_rep_id) → a display name for the board's
+  // Rep column + filter. (Assignment is set in the campaign CRM via "Assign rep".)
+  const reps = ((repRows ?? []) as { id: string; first_name: string | null; last_name: string | null }[]).map((r) => ({
+    id: r.id,
+    name: [r.first_name, r.last_name].filter(Boolean).join(" ").trim() || r.id.slice(0, 8),
   }));
 
   const prospects: SalesProspect[] = ((data ?? []) as Record<string, unknown>[]).map((p) => {
@@ -55,6 +64,7 @@ export default async function SalesPage() {
       website: (p.website as string) ?? null,
       stage: p.stage as string,
       agent_id: (p.agent_id as string) ?? null,
+      sales_rep_id: (p.sales_rep_id as string) ?? null,
       preview_url: (p.preview_url as string) ?? null,
       lookup_count: (p.lookup_count as number) ?? 0,
       last_looked_up_at: (p.last_looked_up_at as string) ?? null,
@@ -70,7 +80,7 @@ export default async function SalesPage() {
   return (
     <div style={{ minHeight: "100vh", background: "#faf9f5", padding: "32px 24px 80px" }}>
       <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-        <SalesBoard prospects={prospects} userEmail={user.email ?? ""} stages={SELECTABLE_STAGES} campaigns={campaigns} />
+        <SalesBoard prospects={prospects} userEmail={user.email ?? ""} stages={SELECTABLE_STAGES} campaigns={campaigns} reps={reps} />
       </div>
     </div>
   );

@@ -30,6 +30,7 @@ export async function getTemplateLeadsForRep(repId: string): Promise<RepTemplate
     )
     .eq("sales_rep_id", repId)
     .is("suppressed_at", null) // suppressed leads drop off the rep's board too
+    .neq("preview_url", "") // reps only see leads with a generated site — the ones they call
     .order("click_count", { ascending: false })
     .order("last_clicked_at", { ascending: false, nullsFirst: false });
   if (error) {

@@ -56,6 +56,7 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
   const [addressFilter, setAddressFilter] = useState("");
   const [siteFilter, setSiteFilter] = useState("");
   const [exportedFilter, setExportedFilter] = useState("");
+  const [repFilter, setRepFilter] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openId, setOpenId] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
@@ -79,8 +80,9 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
     if (addressFilter) sp.set("address", addressFilter);
     if (siteFilter) sp.set("site", siteFilter);
     if (exportedFilter) sp.set("exported", exportedFilter);
+    if (repFilter) sp.set("rep", repFilter);
     return sp;
-  }, [stageFilter, websiteFilter, missingFilter, dnaFilter, addressFilter, siteFilter, exportedFilter]);
+  }, [stageFilter, websiteFilter, missingFilter, dnaFilter, addressFilter, siteFilter, exportedFilter, repFilter]);
 
   const load = useCallback(async () => {
     const seq = ++fetchSeq.current;
@@ -416,6 +418,15 @@ export function ProspectsTable({ campaign }: { campaign: CampaignHeader }) {
           onChange={setFilter(setExportedFilter)}
           placeholder="Any export"
           options={[{ value: "no", label: "not exported" }, { value: "yes", label: "exported" }]}
+        />
+        <Select
+          value={repFilter}
+          onChange={setFilter(setRepFilter)}
+          placeholder="Any rep"
+          options={[
+            { value: "unassigned", label: "Unassigned" },
+            ...reps.map((r) => ({ value: r.id, label: `${r.first_name}${r.last_name ? ` ${r.last_name}` : ""}` })),
+          ]}
         />
       </div>
 

@@ -125,6 +125,18 @@ describe("applyProspectFilters", () => {
     expect(no.calls).toEqual([{ method: "or", args: ["exported_at.is.null"] }, SUP]);
   });
 
+  it("rep=<uuid> filters by assigned sales rep", () => {
+    const { q, calls } = stub();
+    applyProspectFilters(q, params({ rep: "rep-123" }));
+    expect(calls).toEqual([{ method: "eq", args: ["sales_rep_id", "rep-123"] }, SUP]);
+  });
+
+  it("rep=unassigned matches leads with no rep", () => {
+    const { q, calls } = stub();
+    applyProspectFilters(q, params({ rep: "unassigned" }));
+    expect(calls).toEqual([{ method: "or", args: ["sales_rep_id.is.null"] }, SUP]);
+  });
+
   it("hides suppressed leads by default (active-only)", () => {
     const { q, calls } = stub();
     applyProspectFilters(q, params({}));

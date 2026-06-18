@@ -14,6 +14,7 @@ export interface SalesProspect {
   website: string | null;
   stage: string;
   agent_id: string | null;
+  sales_rep_id: string | null;
   preview_url: string | null;
   lookup_count: number;
   last_looked_up_at: string | null;
@@ -30,25 +31,32 @@ export function SalesBoard({
   userEmail,
   stages,
   campaigns = [],
+  reps = [],
 }: {
   prospects: SalesProspect[];
   userEmail: string;
   stages: string[];
   campaigns?: { id: string; label: string }[];
+  reps?: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [mineOnly, setMineOnly] = useState(false);
   const [engagedFirst, setEngagedFirst] = useState(false);
   const [campaignFilter, setCampaignFilter] = useState("");
+  const [repFilter, setRepFilter] = useState(""); // "" | repId | "unassigned"
   const [soldFilter, setSoldFilter] = useState(""); // "" | "sold" | "unsold"
   const [engagementFilter, setEngagementFilter] = useState(""); // "" | "looked_up" | "opened"
   const [busyId, setBusyId] = useState<string | null>(null);
   const [convertFor, setConvertFor] = useState<SalesProspect | null>(null);
   const [callFor, setCallFor] = useState<SalesProspect | null>(null);
 
+  const repName = (id: string | null) => (id ? reps.find((r) => r.id === id)?.name ?? `rep ${id.slice(0, 6)}` : null);
+
   const filtered = prospects.filter((p) => {
     if (mineOnly && p.agent_id !== userEmail) return false;
     if (campaignFilter && p.campaign_id !== campaignFilter) return false;
+    if (repFilter === "unassigned" && p.sales_rep_id) return false;
+    if (repFilter && repFilter !== "unassigned" && p.sales_rep_id !== repFilter) return false;
     if (soldFilter === "sold" && !p.sold_at) return false;
     if (soldFilter === "unsold" && p.sold_at) return false;
     if (engagementFilter === "looked_up" && p.lookup_count <= 0) return false;
@@ -100,6 +108,11 @@ export function SalesBoard({
           <option value="">All campaigns / industries</option>
           {campaigns.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
         </select>
+        <select value={repFilter} onChange={(e) => setRepFilter(e.target.value)} style={filterSel}>
+          <option value="">All reps</option>
+          <option value="unassigned">Unassigned</option>
+          {reps.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </select>
         <select value={soldFilter} onChange={(e) => setSoldFilter(e.target.value)} style={filterSel}>
           <option value="">Any sold status</option>
           <option value="sold">Sold</option>
@@ -124,7 +137,7 @@ export function SalesBoard({
               <th style={{ ...th, width: 70 }}>Opened</th>
               <th style={{ ...th, width: 70 }}>Calls</th>
               <th style={th}>Preview</th>
-              <th style={th}>Agent</th>
+              <th style={th}>Rep</th>
               <th style={{ ...th, width: 90 }}>Sold</th>
               <th style={{ ...th, width: 160 }}>Stage</th>
               <th style={{ ...th, width: 90 }} />
@@ -147,7 +160,11 @@ export function SalesBoard({
                 <td style={td}>
                   {p.preview_url ? <a href={p.preview_url} target="_blank" rel="noreferrer" style={{ color: "#0a4a7a", fontSize: 12 }}>view →</a> : <span style={{ color: "#bbb", fontSize: 12 }}>—</span>}
                 </td>
-                <td style={{ ...td, fontSize: 11, color: "#888886", fontFamily: "var(--font-mono)" }}>{p.agent_id || "unassigned"}</td>
+                <td style={{ ...td, fontSize: 12 }}>
+                  {p.sales_rep_id
+                    ? <span style={{ color: "#0a4a7a", fontWeight: 600 }}>{repName(p.sales_rep_id)}</span>
+                    : <span style={{ color: "#bbb", fontFamily: "var(--font-mono)", fontSize: 11 }}>unassigned</span>}
+                </td>
                 <td style={{ ...td, textAlign: "center" }}><SoldBadge soldAt={p.sold_at} /></td>
                 <td style={td}>
                   {p.stage === "converted" ? (

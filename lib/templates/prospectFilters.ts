@@ -81,6 +81,11 @@ export function applyProspectFilters<Q extends ProspectFilterable<Q>>(
   if (exported === "yes") query = query.or("exported_at.not.is.null");
   else if (exported === "no") query = query.or("exported_at.is.null");
 
+  // rep — filter by assigned sales rep (sales_rep_id); "unassigned" = no rep.
+  const rep = sp.get("rep");
+  if (rep === "unassigned") query = query.or("sales_rep_id.is.null");
+  else if (rep) query = query.eq("sales_rep_id", rep);
+
   // suppressed — list cleaning. Suppressed leads (suppressed_at stamped) are
   // moved to the cross-campaign Suppressed list and removed from the working
   // CRM list AND the CSV export BY DEFAULT (the campaign list should only hold

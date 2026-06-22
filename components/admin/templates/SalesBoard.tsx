@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { slugify, isValidSlug } from "@/lib/templates/normalize/slug";
+import { LEAD_STATUSES } from "@/lib/templates/leadStatus";
 
 export interface SalesProspect {
   id: string;
@@ -23,6 +24,7 @@ export interface SalesProspect {
   call_count: number;
   last_called_at: string | null;
   sold_at: string | null;
+  lead_status: string;
   campaign_id: string | null;
 }
 
@@ -86,6 +88,20 @@ export function SalesBoard({
     }
   }
 
+  async function setStatus(id: string, lead_status: string) {
+    setBusyId(id);
+    try {
+      await fetch(`/api/templates/prospects/${id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ lead_status }),
+      });
+      router.refresh();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
@@ -138,7 +154,7 @@ export function SalesBoard({
               <th style={{ ...th, width: 70 }}>Calls</th>
               <th style={th}>Preview</th>
               <th style={th}>Rep</th>
-              <th style={{ ...th, width: 90 }}>Sold</th>
+              <th style={{ ...th, width: 150 }}>Status</th>
               <th style={{ ...th, width: 160 }}>Stage</th>
               <th style={{ ...th, width: 90 }} />
             </tr>
@@ -165,7 +181,22 @@ export function SalesBoard({
                     ? <span style={{ color: "#0a4a7a", fontWeight: 600 }}>{repName(p.sales_rep_id)}</span>
                     : <span style={{ color: "#bbb", fontFamily: "var(--font-mono)", fontSize: 11 }}>unassigned</span>}
                 </td>
-                <td style={{ ...td, textAlign: "center" }}><SoldBadge soldAt={p.sold_at} /></td>
+                <td style={td}>
+                  <select
+                    value={p.lead_status || "new"}
+                    disabled={busyId === p.id}
+                    onChange={(e) => setStatus(p.id, e.target.value)}
+                    style={{
+                      padding: "5px 8px", borderRadius: 4, fontSize: 12, fontFamily: "var(--font-sans)", cursor: "pointer",
+                      border: `1.5px solid ${p.lead_status === "sold" ? "#1a7a3a" : "#d8d6cf"}`,
+                      background: p.lead_status === "sold" ? "#eaf6ee" : "#fff",
+                      color: p.lead_status === "sold" ? "#1a7a3a" : "#333",
+                      fontWeight: p.lead_status === "sold" ? 700 : 500,
+                    }}
+                  >
+                    {LEAD_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                </td>
                 <td style={td}>
                   {p.stage === "converted" ? (
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "#1a7a3a" }}>converted ✓</span>
@@ -231,17 +262,6 @@ function EngageBadge({ count, at, glyph, tone, title }: { count: number; at: str
 
 /** Sold pill — green "SOLD" with the sold date on hover, em-dash when not sold.
  * A rep sets this from their portal; the operator converts later. */
-function SoldBadge({ soldAt }: { soldAt: string | null }) {
-  if (!soldAt) return <span style={{ color: "#c9c7c0", fontSize: 12 }} title="Not sold yet">—</span>;
-  const when = new Date(soldAt).toLocaleDateString();
-  return (
-    <span title={`Marked sold ${when}`}
-      style={{ display: "inline-block", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "#fff", background: "#1a7a3a", padding: "3px 7px", borderRadius: 3, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-      sold
-    </span>
-  );
-}
-
 /** Call-count pill with last-called date on hover. */
 function CallBadge({ count, lastCalledAt }: { count: number; lastCalledAt: string | null }) {
   if (count <= 0) return <span style={{ color: "#c9c7c0", fontSize: 12 }} title="Not called yet">—</span>;

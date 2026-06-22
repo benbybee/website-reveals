@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { LEAD_STATUSES } from "@/lib/templates/leadStatus";
 
 type Session = {
   token: string;
@@ -42,6 +43,7 @@ type TemplateLead = {
   lookup_count: number;
   click_count: number;
   sold_at: string | null;
+  lead_status: string;
 };
 
 type Tab = "leads" | "submissions" | "clients" | "tasks";
@@ -137,13 +139,13 @@ function LeadsTab({ leads }: { leads: TemplateLead[] }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  async function toggleSold(lead: TemplateLead) {
+  async function setStatus(lead: TemplateLead, status: string) {
     setBusyId(lead.id);
     try {
-      const res = await fetch(`/api/sales-rep/template-leads/${lead.id}/sold`, {
+      const res = await fetch(`/api/sales-rep/template-leads/${lead.id}/status`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sold: !lead.sold_at }),
+        body: JSON.stringify({ status }),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
@@ -170,7 +172,7 @@ function LeadsTab({ leads }: { leads: TemplateLead[] }) {
             <th style={th}>Looked up</th>
             <th style={th}>Opened</th>
             <th style={th}>Site</th>
-            <th style={th} />
+            <th style={th}>Status</th>
           </tr>
         </thead>
         <tbody>
@@ -190,12 +192,21 @@ function LeadsTab({ leads }: { leads: TemplateLead[] }) {
                   <span style={{ color: "#bbb", fontSize: 12 }}>not yet</span>
                 )}
               </td>
-              <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
-                {l.sold_at ? (
-                  <button onClick={() => toggleSold(l)} disabled={busyId === l.id} style={notNeededBtnStyle}>✓ Sold — undo</button>
-                ) : (
-                  <button onClick={() => toggleSold(l)} disabled={busyId === l.id} style={soldBtnStyle}>Mark sold</button>
-                )}
+              <td style={{ ...td, whiteSpace: "nowrap" }}>
+                <select
+                  value={l.lead_status || "new"}
+                  onChange={(e) => setStatus(l, e.target.value)}
+                  disabled={busyId === l.id}
+                  style={{
+                    padding: "6px 8px", borderRadius: 6, fontSize: 13, fontFamily: "inherit", cursor: "pointer",
+                    border: `1.5px solid ${l.lead_status === "sold" ? "#1a7a3a" : "#d8d6cf"}`,
+                    background: l.lead_status === "sold" ? "#eaf6ee" : "#fff",
+                    color: l.lead_status === "sold" ? "#1a7a3a" : "#333",
+                    fontWeight: l.lead_status === "sold" ? 700 : 500,
+                  }}
+                >
+                  {LEAD_STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
               </td>
             </tr>
           ))}

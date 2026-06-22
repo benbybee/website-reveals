@@ -30,7 +30,7 @@ export default async function SalesPage() {
   const [{ data }, { data: campRows }, { data: repRows }] = await Promise.all([
     db
       .from("tpl_prospects")
-      .select("id, business_name, city, state, phone, website, stage, agent_id, sales_rep_id, preview_url, call_count, last_called_at, lookup_count, last_looked_up_at, click_count, last_clicked_at, sold_at, campaign_id")
+      .select("id, business_name, city, state, phone, website, stage, agent_id, sales_rep_id, preview_url, call_count, last_called_at, lookup_count, last_looked_up_at, click_count, last_clicked_at, sold_at, lead_status, campaign_id")
       .in("stage", BOARD_STAGES)
       .is("suppressed_at", null) // suppressed leads are off the sales board too
       .neq("preview_url", "") // only leads whose site is generated — those are the ones reps call
@@ -73,6 +73,7 @@ export default async function SalesPage() {
       call_count: (p.call_count as number) ?? 0,
       last_called_at: (p.last_called_at as string) ?? null,
       sold_at: (p.sold_at as string) ?? null,
+      lead_status: (p.lead_status as string) ?? "new",
       campaign_id: (p.campaign_id as string) ?? null,
     };
   });

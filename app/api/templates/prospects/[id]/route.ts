@@ -7,10 +7,12 @@ import {
   PROMOTED_COLUMNS,
   type EditableField,
 } from "@/lib/templates/prospectEdit";
+import { isValidLeadStatus } from "@/lib/templates/leadStatus";
 
 interface PatchBody {
   stage?: string;
   agent_id?: string | null;
+  lead_status?: string;
   fields?: Partial<Record<EditableField, string>>;
   record?: Record<string, unknown>;
 }
@@ -44,10 +46,14 @@ export async function PATCH(
     );
   }
 
+  if (body.lead_status !== undefined && !isValidLeadStatus(body.lead_status)) {
+    return NextResponse.json({ error: "invalid_status" }, { status: 400 });
+  }
+
   const db = tplDb();
   const { data: existing } = await db
     .from("tpl_prospects")
-    .select("stage, record")
+    .select("stage, record, sold_at")
     .eq("id", id)
     .maybeSingle();
   if (!existing) {
@@ -72,6 +78,18 @@ export async function PATCH(
   if (mergedRecord) update.record = mergedRecord;
   if (typeof body.stage === "string") update.stage = body.stage;
   if (body.agent_id !== undefined) update.agent_id = body.agent_id;
+  // lead_status: `sold` mirrors onto sold_at (preserve an existing timestamp) so
+  // the Convert flow + sold filter keep working; any other status clears it.
+  if (body.lead_status !== undefined) {
+    update.lead_status = body.lead_status;
+    if (body.lead_status === "sold") {
+      update.sold_at = (existing.sold_at as string) ?? new Date().toISOString();
+      update.sold_by = auth.user.email;
+    } else {
+      update.sold_at = null;
+      update.sold_by = null;
+    }
+  }
 
   const { error: updErr } = await db.from("tpl_prospects").update(update).eq("id", id);
   if (updErr) {

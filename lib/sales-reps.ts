@@ -16,6 +16,7 @@ export interface RepTemplateLead {
   click_count: number;
   last_clicked_at: string | null;
   sold_at: string | null;
+  lead_status: string;
 }
 
 /**
@@ -26,7 +27,7 @@ export async function getTemplateLeadsForRep(repId: string): Promise<RepTemplate
   const { data, error } = await tplDb()
     .from("tpl_prospects")
     .select(
-      "id, source_id, business_name, city, state, phone, stage, preview_url, lookup_count, last_looked_up_at, click_count, last_clicked_at, sold_at",
+      "id, source_id, business_name, city, state, phone, stage, preview_url, lookup_count, last_looked_up_at, click_count, last_clicked_at, sold_at, lead_status",
     )
     .eq("sales_rep_id", repId)
     .is("suppressed_at", null) // suppressed leads drop off the rep's board too

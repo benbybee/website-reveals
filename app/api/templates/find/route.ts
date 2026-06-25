@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { tplDb } from "@/lib/templates/db";
 import { templatesEnabled } from "@/lib/templates/config";
 import { normalizeName } from "@/lib/templates/find/match";
@@ -71,5 +71,23 @@ export async function POST(req: NextRequest) {
     city: s.city,
     state: s.state,
   }));
+
+  // Funnel: record the search (what they typed + how many matched) AFTER the
+  // response so it never slows the search. Best-effort — logging must not break.
+  const ua = req.headers.get("user-agent");
+  after(async () => {
+    try {
+      await db.from("tpl_join_events").insert({
+        kind: "search",
+        query: name.slice(0, 120),
+        result_count: suggestions.length,
+        ip: ip === "unknown" ? null : ip,
+        user_agent: ua,
+      });
+    } catch {
+      /* ignore */
+    }
+  });
+
   return NextResponse.json({ suggestions });
 }

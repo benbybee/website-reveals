@@ -40,6 +40,21 @@ export default async function SalesPage() {
     db.from("sales_reps").select("id, first_name, last_name"),
   ]);
 
+  // /join engagement funnel (all-time): arrived → searched → found site → opened.
+  // visit/search live in tpl_join_events; resolved/clicked in tpl_prospect_lookups.
+  const [visits, searches, resolved, clicked] = await Promise.all([
+    db.from("tpl_join_events").select("id", { count: "exact", head: true }).eq("kind", "visit"),
+    db.from("tpl_join_events").select("id", { count: "exact", head: true }).eq("kind", "search"),
+    db.from("tpl_prospect_lookups").select("id", { count: "exact", head: true }).eq("kind", "resolved"),
+    db.from("tpl_prospect_lookups").select("id", { count: "exact", head: true }).eq("kind", "clicked"),
+  ]);
+  const funnel = {
+    visits: visits.count ?? 0,
+    searches: searches.count ?? 0,
+    found: resolved.count ?? 0,
+    opened: clicked.count ?? 0,
+  };
+
   // Campaigns are per-industry, so the campaign filter doubles as the industry
   // filter (label = industry slug).
   const campaigns = ((campRows ?? []) as { id: string; industry_slug: string }[]).map((c) => ({
@@ -81,7 +96,7 @@ export default async function SalesPage() {
   return (
     <div style={{ minHeight: "100vh", background: "#faf9f5", padding: "32px 24px 80px" }}>
       <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-        <SalesBoard prospects={prospects} userEmail={user.email ?? ""} stages={SELECTABLE_STAGES} campaigns={campaigns} reps={reps} />
+        <SalesBoard prospects={prospects} userEmail={user.email ?? ""} stages={SELECTABLE_STAGES} campaigns={campaigns} reps={reps} funnel={funnel} />
       </div>
     </div>
   );

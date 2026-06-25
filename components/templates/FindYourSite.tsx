@@ -35,6 +35,15 @@ export function FindYourSite() {
   const [stepIdx, setStepIdx] = useState(0);
 
   const reduceMotion = useRef(false);
+  const visitSent = useRef(false);
+
+  // Top-of-funnel: log a raw arrival once on mount (fire-and-forget). Lets us see
+  // who reaches /join, not just who completes the lookup.
+  useEffect(() => {
+    if (visitSent.current) return;
+    visitSent.current = true;
+    fetch("/api/templates/join/visit", { method: "POST", keepalive: true }).catch(() => {});
+  }, []);
 
   // ----- atmosphere + hero entrance (failure-safe: content is visible by
   // default; gsap.from animates INTO the resting state) -----

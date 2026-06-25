@@ -34,12 +34,14 @@ export function SalesBoard({
   stages,
   campaigns = [],
   reps = [],
+  funnel,
 }: {
   prospects: SalesProspect[];
   userEmail: string;
   stages: string[];
   campaigns?: { id: string; label: string }[];
   reps?: { id: string; name: string }[];
+  funnel?: { visits: number; searches: number; found: number; opened: number };
 }) {
   const router = useRouter();
   const [mineOnly, setMineOnly] = useState(false);
@@ -118,6 +120,20 @@ export function SalesBoard({
         </div>
       </div>
       <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "1.75rem", fontWeight: 700, marginBottom: 14 }}>Sales board</h1>
+
+      {funnel && (
+        <div style={funnelStrip}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "#888886", marginRight: 4 }}>/join funnel</span>
+          <FunnelStep n={funnel.visits} label="arrived" />
+          <FunnelArrow />
+          <FunnelStep n={funnel.searches} label="searched" />
+          <FunnelArrow />
+          <FunnelStep n={funnel.found} label="found site" />
+          <FunnelArrow />
+          <FunnelStep n={funnel.opened} label="opened site" accent />
+          <span style={{ marginLeft: "auto", fontSize: 11, color: "#a8a6a0" }}>all-time</span>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <select value={campaignFilter} onChange={(e) => setCampaignFilter(e.target.value)} style={filterSel}>
@@ -244,6 +260,19 @@ export function SalesBoard({
       )}
     </div>
   );
+}
+
+function FunnelStep({ n, label, accent }: { n: number; label: string; accent?: boolean }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "baseline", gap: 5 }}>
+      <span style={{ fontFamily: "var(--font-serif)", fontSize: 19, fontWeight: 700, color: accent ? "#0a7a3d" : "#111110" }}>{n.toLocaleString()}</span>
+      <span style={{ fontSize: 12, color: "#555553" }}>{label}</span>
+    </span>
+  );
+}
+
+function FunnelArrow() {
+  return <span style={{ color: "#c9c7c0", fontSize: 14, margin: "0 2px" }}>→</span>;
 }
 
 function EngageBadge({ count, at, glyph, tone, title }: { count: number; at: string | null; glyph: string; tone: "green" | "muted"; title: string }) {
@@ -466,6 +495,7 @@ function ConvertModal({
 }
 
 const filterSel: React.CSSProperties = { padding: "6px 10px", border: "1.5px solid #d8d6cf", borderRadius: 4, fontSize: 13, fontFamily: "var(--font-sans)", background: "#fff", color: "#333", cursor: "pointer" };
+const funnelStrip: React.CSSProperties = { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "#fff", border: "1.5px solid #e8e6df", borderRadius: 6, padding: "10px 16px", marginBottom: 16 };
 const th: React.CSSProperties = { padding: "9px 12px", textAlign: "left", fontFamily: "var(--font-mono)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", color: "#555553", fontWeight: 600 };
 const td: React.CSSProperties = { padding: "10px 12px", fontSize: 13, verticalAlign: "middle" };
 const ghostBtn: React.CSSProperties = { fontFamily: "var(--font-sans)", fontSize: 12, fontWeight: 500, color: "#555553", background: "#fff", border: "1.5px solid #d8d6cf", borderRadius: 4, padding: "5px 10px", cursor: "pointer" };

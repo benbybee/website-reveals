@@ -4,6 +4,20 @@ export function templatesEnabled(): boolean {
 
 export const APIFY_TOKEN = () => process.env.APIFY_TOKEN ?? "";
 
+// Google Places API (new): powers the rep instant-preview GBP picker
+// (Autocomplete + Place Details). Empty key = the picker is disabled. No LLM.
+export const GOOGLE_PLACES_API_KEY = () => (process.env.GOOGLE_PLACES_API_KEY ?? "").trim();
+export const googlePlacesEnabled = () => GOOGLE_PLACES_API_KEY().length > 0;
+
+// C2 photos[] gate (ADR 0007) — OFF until the SL Builder templates declare photo
+// slots and /api/builds accepts brief.photos[]. WR must not send photos until then.
+export const slTemplatePhotosEnabled = () =>
+  (process.env.SL_TEMPLATE_PHOTOS_ENABLED ?? "").trim().toLowerCase() === "true";
+
+// Per-rep daily instant-preview cost ceiling (USD). Guards runaway spend on the
+// interactive rep flow (gap 5). Non-numeric / unset → $5 default.
+export const REP_DAILY_BUDGET_USD = () => Number(process.env.REP_DAILY_BUDGET_USD ?? "5") || 5;
+
 // Firecrawl powers the brand-DNA enrichment step (logo + primary color from the
 // business website). Empty key = DNA step is skipped (prospect keeps GBP data
 // only). The per-credit USD rate mirrors the account plan and is used only to

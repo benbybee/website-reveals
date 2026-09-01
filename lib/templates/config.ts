@@ -14,9 +14,22 @@ export const googlePlacesEnabled = () => GOOGLE_PLACES_API_KEY().length > 0;
 export const slTemplatePhotosEnabled = () =>
   (process.env.SL_TEMPLATE_PHOTOS_ENABLED ?? "").trim().toLowerCase() === "true";
 
-// Per-rep daily instant-preview cost ceiling (USD). Guards runaway spend on the
-// interactive rep flow (gap 5). Non-numeric / unset → $5 default.
-export const REP_DAILY_BUDGET_USD = () => Number(process.env.REP_DAILY_BUDGET_USD ?? "5") || 5;
+// Estimated SL build cost per template build (USD). UNCONFIRMED — real per-build
+// cost attribution is blocked on SL (gap G-C4); update this when SL provides the
+// number. Folded into the rep instant-preview dollar gate AND recorded as a
+// per-build cost event so the ledger reflects the dominant cost, not just WR's
+// ~$0.02 of Places/Firecrawl.
+export const SL_TEMPLATE_BUILD_EST_USD = () => Number(process.env.SL_TEMPLATE_BUILD_EST_USD ?? "4") || 4;
+
+// Hard per-rep/day cap on the NUMBER of instant-preview builds — the primary
+// runaway guard, independent of the fuzzy per-build dollar estimate.
+export const REP_DAILY_BUILD_LIMIT = () => Number(process.env.REP_DAILY_BUILD_LIMIT ?? "30") || 30;
+
+// Per-rep daily instant-preview DOLLAR ceiling (USD): WR metered spend + the
+// estimated SL build cost. Default accommodates REP_DAILY_BUILD_LIMIT builds at
+// the current estimate (~30 × ~$4), so the count cap is the primary limiter and
+// this dollar cap is the cost-overrun backstop.
+export const REP_DAILY_BUDGET_USD = () => Number(process.env.REP_DAILY_BUDGET_USD ?? "150") || 150;
 
 // Firecrawl powers the brand-DNA enrichment step (logo + primary color from the
 // business website). Empty key = DNA step is skipped (prospect keeps GBP data

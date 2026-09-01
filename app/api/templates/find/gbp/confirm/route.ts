@@ -116,6 +116,9 @@ export async function POST(req: NextRequest) {
       if (result.code === "over_budget") {
         return NextResponse.json({ error: "over_budget", cap: result.cap }, { status: 402 });
       }
+      if (result.code === "daily_limit") {
+        return NextResponse.json({ error: "daily_limit", limit: result.limit }, { status: 429 });
+      }
       return NextResponse.json({ error: "template_not_ready" }, { status: 400 });
     }
     return NextResponse.json({

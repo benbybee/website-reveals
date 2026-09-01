@@ -1,7 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getReadyIndustry } from "../industries/registry";
-import { repSpentTodayUsd, withinRepBudget } from "../cost/budget";
-import { REP_DAILY_BUDGET_USD, SL_TEMPLATE_TRANSPORT } from "../config";
+import { repSpentTodayUsd, withinRepBudget, repBuildsToday, withinRepBuildLimit } from "../cost/budget";
+import {
+  REP_DAILY_BUDGET_USD,
+  REP_DAILY_BUILD_LIMIT,
+  SL_TEMPLATE_BUILD_EST_USD,
+  SL_TEMPLATE_TRANSPORT,
+} from "../config";
 import { findOrCreateSalesCampaign } from "../salesIntake";
 import { placeDetails } from "../places/client";
 import { mapPlaceDetails } from "../places/mapPlaceDetails";
@@ -27,6 +32,7 @@ export interface InstantPreviewInput {
 export type InstantPreviewResult =
   | { ok: true; prospectId: string; batchId: string; recordCount: number }
   | { ok: false; code: "template_not_ready" }
+  | { ok: false; code: "daily_limit"; limit: number }
   | { ok: false; code: "over_budget"; cap: number };
 
 function utcDayStartIso(): string {
@@ -41,8 +47,17 @@ export async function runInstantPreview(input: InstantPreviewInput): Promise<Ins
   const industry = await getReadyIndustry(db, industrySlug);
   if (!industry) return { ok: false, code: "template_not_ready" };
 
-  // Guard 2 (budget): stop before any paid Places call if the rep is over cap.
-  const spent = await repSpentTodayUsd(db, rep.rep_id, utcDayStartIso());
+  const dayStart = utcDayStartIso();
+
+  // Guard 2 (rate): hard per-rep/day build-count cap — the primary runaway guard.
+  const buildsToday = await repBuildsToday(db, rep.rep_id, dayStart);
+  if (!withinRepBuildLimit(buildsToday)) {
+    return { ok: false, code: "daily_limit", limit: REP_DAILY_BUILD_LIMIT() };
+  }
+
+  // Guard 3 (budget): dollar backstop (WR metered + SL build estimate). Both
+  // guards run before any paid Places call.
+  const spent = await repSpentTodayUsd(db, rep.rep_id, dayStart);
   if (!withinRepBudget(spent)) {
     return { ok: false, code: "over_budget", cap: REP_DAILY_BUDGET_USD() };
   }
@@ -101,6 +116,26 @@ export async function runInstantPreview(input: InstantPreviewInput): Promise<Ins
 
   const transport = SL_TEMPLATE_TRANSPORT() === "table" ? "table" : "post";
   const push = await assembleAndPush(db, campaignId, { prospectIds: [prospectId], transport });
+
+  // Ledger the estimated SL build cost (stage 'build') so the per-rep dollar gate
+  // + rollups reflect the dominant cost, not just WR's ~$0.02 of Places/Firecrawl.
+  // An estimate until SL reports real cost (G-C4). Best-effort — bookkeeping
+  // never fails the build. Only when a build was actually dispatched.
+  if (push.recordCount > 0) {
+    try {
+      await db.from("tpl_cost_events").insert({
+        campaign_id: campaignId,
+        stage: "build",
+        actor: "sitelaunchr",
+        units: 1,
+        usd: SL_TEMPLATE_BUILD_EST_USD(),
+        rep_id: rep.rep_id,
+        run_id: null,
+      });
+    } catch {
+      /* ignore */
+    }
+  }
 
   return { ok: true, prospectId, batchId: push.batchId, recordCount: push.recordCount };
 }

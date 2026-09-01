@@ -4,6 +4,8 @@ import {
   googlePlacesEnabled,
   slTemplatePhotosEnabled,
   REP_DAILY_BUDGET_USD,
+  REP_DAILY_BUILD_LIMIT,
+  SL_TEMPLATE_BUILD_EST_USD,
 } from "./config";
 
 afterEach(() => {
@@ -11,6 +13,8 @@ afterEach(() => {
   delete process.env.GOOGLE_PLACES_API_KEY;
   delete process.env.SL_TEMPLATE_PHOTOS_ENABLED;
   delete process.env.REP_DAILY_BUDGET_USD;
+  delete process.env.REP_DAILY_BUILD_LIMIT;
+  delete process.env.SL_TEMPLATE_BUILD_EST_USD;
 });
 
 describe("templatesEnabled", () => {
@@ -52,15 +56,39 @@ describe("slTemplatePhotosEnabled", () => {
 });
 
 describe("REP_DAILY_BUDGET_USD", () => {
-  it("defaults to 5 when unset", () => {
-    expect(REP_DAILY_BUDGET_USD()).toBe(5);
+  it("defaults to 150 when unset (accommodates ~30 builds × ~$4)", () => {
+    expect(REP_DAILY_BUDGET_USD()).toBe(150);
   });
-  it("defaults to 5 for a non-numeric value", () => {
+  it("defaults to 150 for a non-numeric value", () => {
     process.env.REP_DAILY_BUDGET_USD = "not-a-number";
-    expect(REP_DAILY_BUDGET_USD()).toBe(5);
+    expect(REP_DAILY_BUDGET_USD()).toBe(150);
   });
   it("reads a numeric override", () => {
     process.env.REP_DAILY_BUDGET_USD = "12.5";
     expect(REP_DAILY_BUDGET_USD()).toBe(12.5);
+  });
+});
+
+describe("REP_DAILY_BUILD_LIMIT", () => {
+  it("defaults to 30 when unset", () => {
+    expect(REP_DAILY_BUILD_LIMIT()).toBe(30);
+  });
+  it("defaults to 30 for a non-numeric value", () => {
+    process.env.REP_DAILY_BUILD_LIMIT = "nope";
+    expect(REP_DAILY_BUILD_LIMIT()).toBe(30);
+  });
+  it("reads a numeric override", () => {
+    process.env.REP_DAILY_BUILD_LIMIT = "10";
+    expect(REP_DAILY_BUILD_LIMIT()).toBe(10);
+  });
+});
+
+describe("SL_TEMPLATE_BUILD_EST_USD", () => {
+  it("defaults to 4 when unset", () => {
+    expect(SL_TEMPLATE_BUILD_EST_USD()).toBe(4);
+  });
+  it("reads a numeric override", () => {
+    process.env.SL_TEMPLATE_BUILD_EST_USD = "6.5";
+    expect(SL_TEMPLATE_BUILD_EST_USD()).toBe(6.5);
   });
 });

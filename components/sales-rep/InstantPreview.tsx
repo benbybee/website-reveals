@@ -101,14 +101,16 @@ export function InstantPreview({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ placeId, industrySlug }),
       });
-      const data = (await res.json().catch(() => ({}))) as { cap?: number; error?: string };
+      const data = (await res.json().catch(() => ({}))) as { cap?: number; limit?: number; error?: string };
       if (res.ok) {
         setStatus("done");
         setMessage("Building your preview — we'll email you the link when it's ready.");
         return;
       }
       setStatus("error");
-      if (res.status === 402) {
+      if (res.status === 429) {
+        setMessage(`You've reached today's preview limit${data.limit ? ` (${data.limit} builds)` : ""}. Try again tomorrow.`);
+      } else if (res.status === 402) {
         setMessage(`You've hit today's preview budget${data.cap ? ` ($${data.cap})` : ""}. Try again tomorrow.`);
       } else if (res.status === 400 && data.error === "template_not_ready") {
         setMessage("We don't have a template for that industry yet.");

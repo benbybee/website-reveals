@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { placesAutocomplete, placeDetails, PlacesDisabledError } from "./client";
+import { placesAutocomplete, placeDetails, resolvePlacePhotoUrl, PlacesDisabledError } from "./client";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -141,5 +141,39 @@ describe("placeDetails", () => {
       rep_id: "rep-1",
     });
     expect(Number(inserted[0].usd)).toBeGreaterThan(0);
+  });
+});
+
+describe("resolvePlacePhotoUrl", () => {
+  it("throws PlacesDisabledError when the key is unset", async () => {
+    await expect(resolvePlacePhotoUrl("places/p1/photos/AbC")).rejects.toBeInstanceOf(
+      PlacesDisabledError,
+    );
+  });
+
+  it("returns the photoUri from the media endpoint (skipHttpRedirect)", async () => {
+    process.env.GOOGLE_PLACES_API_KEY = "test-key";
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ name: "x", photoUri: "https://lh3.googleusercontent.com/abc" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock as never);
+
+    const url = await resolvePlacePhotoUrl("places/p1/photos/AbC", 1600);
+
+    expect(url).toBe("https://lh3.googleusercontent.com/abc");
+    const [u, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(u).toContain("/places/p1/photos/AbC/media");
+    expect(u).toContain("maxWidthPx=1600");
+    expect(u).toContain("skipHttpRedirect=true");
+    expect((init.headers as Record<string, string>)["X-Goog-Api-Key"]).toBe("test-key");
+  });
+
+  it("returns null on a non-2xx response", async () => {
+    process.env.GOOGLE_PLACES_API_KEY = "test-key";
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("no", { status: 403 })) as never);
+    expect(await resolvePlacePhotoUrl("places/p/photos/z")).toBeNull();
   });
 });

@@ -23,6 +23,12 @@ const JUNK =
 const NON_PHOTO =
   /(logo|favicon|apple-touch|png-alpha|transparent|[-_/]icons?[-_/.]|\bicons?\b|badge|award)/i;
 
+// Framework starter-kit default marks are NOT a brand logo — shipping vite.svg as
+// the logo is worse than no logo (it also suppresses the Firecrawl fallback that
+// could render the JS SPA and find the real one). Drop them from logo detection.
+const FRAMEWORK_DEFAULT_LOGO =
+  /(\/(vite|next|nuxt|react|vue|svelte|gatsby|remix|astro|angular)\.svg|logo(192|512)\.png)(\?|$)/i;
+
 /** Parse the attributes of a single tag string into a lowercased-key map. */
 function attrs(tag: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -83,7 +89,10 @@ export function extractSiteAssets(html: string, baseUrl: string): SiteAssets {
   const appleTouch = links.find((a) => (a.rel ?? "").toLowerCase().includes("apple-touch-icon"))?.href;
   const ogLogo = metas.find((a) => metaKey(a) === "og:logo")?.content;
   const favicon = links.find((a) => relIs(a, "icon") || relIs(a, "shortcut"))?.href;
-  const logoUrl = firstResolvable([appleTouch, ogLogo, favicon], baseUrl);
+  const logoUrl = firstResolvable(
+    [appleTouch, ogLogo, favicon].filter((h) => h && !FRAMEWORK_DEFAULT_LOGO.test(h)),
+    baseUrl,
+  );
 
   const ogImages = metas
     .filter((a) => ["og:image", "og:image:url", "og:image:secure_url"].includes(metaKey(a)))

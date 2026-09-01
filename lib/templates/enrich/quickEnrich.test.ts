@@ -3,7 +3,9 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 // Mock the Firecrawl branding fallback; both this test and quickEnrich import it
 // by the same specifier, so the mock intercepts quickEnrich's call.
 vi.mock("../../firecrawl", () => ({ scrapeBrandDNA: vi.fn() }));
+vi.mock("../places/client", () => ({ resolvePlacePhotoUrl: vi.fn() }));
 import { scrapeBrandDNA } from "../../firecrawl";
+import { resolvePlacePhotoUrl } from "../places/client";
 import { quickEnrich } from "./quickEnrich";
 import type { CanonicalRecord } from "../types";
 
@@ -31,6 +33,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.clearAllMocks();
   delete process.env.FIRECRAWL_API_KEY;
+  delete process.env.GOOGLE_PLACES_API_KEY;
 });
 
 describe("quickEnrich", () => {
@@ -123,5 +126,73 @@ describe("quickEnrich", () => {
     expect(fc).toBeTruthy();
     expect(fc?.stage).toBe("enrich");
     expect(fc?.rep_id).toBe("rep-1");
+  });
+
+  it("fills photos with real Google Places business photos + ledgers the cost", async () => {
+    process.env.GOOGLE_PLACES_API_KEY = "test-key";
+    vi.mocked(resolvePlacePhotoUrl).mockImplementation(async (ref: string) => `https://lh3/${ref}.jpg`);
+    vi.stubGlobal("fetch", vi.fn(async () => imageOk()) as never);
+
+    const inserted: Record<string, unknown>[] = [];
+    const db = {
+      from: () => ({
+        insert: (row: Record<string, unknown>) => {
+          inserted.push(row);
+          return Promise.resolve({ error: null });
+        },
+      }),
+    };
+
+    const { record } = await quickEnrich({
+      place,
+      industrySlug: "hvac",
+      html: "<p>bare</p>", // no site photos → Places fills
+      photoRefs: ["places/p/photos/A", "places/p/photos/B"],
+      db: db as never,
+      campaignId: "camp-1",
+      repId: "rep-1",
+    });
+
+    const urls = record.photos?.map((p) => p.src_url) ?? [];
+    expect(urls).toContain("https://lh3/places/p/photos/A.jpg");
+    expect(urls).toContain("https://lh3/places/p/photos/B.jpg");
+    const photoCost = inserted.find((r) => r.actor === "google-places-photo");
+    expect(photoCost).toBeTruthy();
+    expect(photoCost?.rep_id).toBe("rep-1");
+    expect(record.sources).toContain("google-places-photo");
+  });
+
+  it("does not resolve Places photos when the site already yields enough", async () => {
+    process.env.GOOGLE_PLACES_API_KEY = "test-key";
+    vi.mocked(resolvePlacePhotoUrl).mockResolvedValue("https://lh3/unused.jpg");
+    vi.stubGlobal("fetch", vi.fn(async () => imageOk()) as never);
+
+    // HTML_RICH yields a site photo; TARGET gap logic should still call for more,
+    // so instead give 6 site photos to prove Places is skipped when full.
+    const sixImgs = Array.from({ length: 6 }, (_, i) => `<img src="/p/${i}.jpg" width="800" height="600">`).join("");
+    await quickEnrich({ place, industrySlug: "hvac", html: sixImgs, photoRefs: ["places/p/photos/A"] });
+    expect(resolvePlacePhotoUrl).not.toHaveBeenCalled();
+  });
+
+  it("treats a framework-default favicon as no logo → Firecrawl takes over (SPA)", async () => {
+    process.env.FIRECRAWL_API_KEY = "fc-key";
+    vi.mocked(scrapeBrandDNA).mockResolvedValue({
+      url: "https://sorensen-co.com",
+      logoUrl: "https://sorensen-co.com/real-logo.png",
+      primaryColor: "#123456",
+      colors: {},
+      creditsUsed: 5,
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => imageOk()) as never);
+
+    const spaHtml = `<link rel="icon" href="/vite.svg"><div id="root"></div>`;
+    const { record } = await quickEnrich({
+      place: { ...place, website: "https://sorensen-co.com" },
+      industrySlug: "hvac",
+      html: spaHtml,
+    });
+
+    expect(scrapeBrandDNA).toHaveBeenCalledTimes(1); // vite.svg not treated as logo
+    expect(record.logo?.src_url).toBe("https://sorensen-co.com/real-logo.png");
   });
 });

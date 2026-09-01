@@ -188,6 +188,28 @@ export async function placeDetails(
     }
   }
 
+  return normalizePlaceDetails(p, placeId);
+}
+
+// Places Photo (New) SKU (~$0.007/photo). Resolves a photo reference to a usable
+// image URL. skipHttpRedirect=true returns JSON { photoUri } instead of a 302 to
+// the image, so we can store the URL for the brief. Real business photography —
+// the robust real-photo source for JS-rendered sites the deterministic site
+// parse can't read.
+export async function resolvePlacePhotoUrl(
+  photoName: string,
+  maxWidthPx = 1200,
+): Promise<string | null> {
+  if (!googlePlacesEnabled()) throw new PlacesDisabledError();
+  // photoName is "places/{id}/photos/{ref}" — its slashes are path segments.
+  const url = `${BASE}/${photoName}/media?maxWidthPx=${maxWidthPx}&skipHttpRedirect=true`;
+  const res = await fetch(url, { headers: { "X-Goog-Api-Key": GOOGLE_PLACES_API_KEY() } });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { photoUri?: string };
+  return json.photoUri ?? null;
+}
+
+function normalizePlaceDetails(p: RawPlace, placeId: string): PlaceDetails {
   return {
     placeId: p.id ?? placeId,
     name: p.displayName?.text ?? "",

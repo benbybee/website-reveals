@@ -79,4 +79,15 @@ describe("extractSiteAssets", () => {
     expect(photos).toContain("https://example.com/s/large.jpg");
     expect(photos.some((p) => p.includes("small.jpg"))).toBe(false);
   });
+
+  it("ignores framework-default favicons (vite.svg etc.) as a logo — so Firecrawl can take over", () => {
+    // Sorensen-style Vite SPA: the only 'logo' is the framework default.
+    const { logoUrl } = extractSiteAssets(`<link rel="icon" href="/vite.svg">`, "https://sorensen-co.com/");
+    expect(logoUrl).toBeUndefined();
+  });
+
+  it("still uses a real (non-default) favicon when there's no apple-touch/og:logo", () => {
+    const { logoUrl } = extractSiteAssets(`<link rel="icon" href="/brand-mark.png">`, "https://x.com/");
+    expect(logoUrl).toBe("https://x.com/brand-mark.png");
+  });
 });

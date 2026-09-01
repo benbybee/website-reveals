@@ -82,6 +82,7 @@ export async function runInstantPreview(input: InstantPreviewInput): Promise<Ins
     place,
     industrySlug: industry.sl_slug,
     html,
+    photoRefs: details.photoRefs,
     db,
     campaignId,
     repId: rep.rep_id,

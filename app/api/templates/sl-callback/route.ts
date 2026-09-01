@@ -1,8 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { verifyCallback } from "@/lib/sitelaunchr";
 import { templatesEnabled, SL_TEMPLATE_HMAC_SECRET } from "@/lib/templates/config";
 import { slStatusToStage } from "@/lib/templates/sl/callbackStatus";
+import { getSalesRepById } from "@/lib/sales-reps";
+import { isNotificationEnabled } from "@/lib/notification-settings";
+import {
+  buildLiveEmail,
+  buildFailedEmail,
+  sendRepBuildEmail,
+  type RepBuildEmailContent,
+} from "@/lib/templates/mail/repBuildEmail";
 
 // SL posts one flat callback per phase transition (not a batch). We key on the
 // echoed external_id (== our source_id). Only the fields we consume are typed;
@@ -67,7 +75,7 @@ export async function POST(req: NextRequest) {
   const supabase = createServerClient();
   const { data: existing } = await supabase
     .from("tpl_prospects")
-    .select("record")
+    .select("record, sales_rep_id, business_name")
     .eq("source_id", key)
     .maybeSingle();
   if (!existing) {
@@ -92,6 +100,37 @@ export async function POST(req: NextRequest) {
     .eq("source_id", key);
   if (updErr) {
     return NextResponse.json({ error: "update_failed" }, { status: 500 });
+  }
+
+  // Rep instant-preview escalation (ADR 0007): when a rep-originated build
+  // (source_id wr-gbp-*) reaches a terminal stage, email the submitting rep the
+  // preview URL (live) or a failure notice. Best-effort, after the ack, gated on
+  // rep notifications — it must never break the callback SL retries against.
+  if (key.startsWith("wr-gbp-") && (stage === "live" || stage === "build_failed")) {
+    const repId = (existing as { sales_rep_id?: string | null }).sales_rep_id ?? null;
+    const businessName =
+      (existing as { business_name?: string | null }).business_name ?? "your prospect";
+    const previewUrl = body.site_url ?? null;
+    const errorMessage = body.error_message ?? null;
+    after(async () => {
+      try {
+        if (!repId) return;
+        if (!(await isNotificationEnabled("sales_rep"))) return;
+        const rep = await getSalesRepById(repId);
+        if (!rep?.email) return;
+        const repName =
+          `${rep.first_name}${rep.last_name ? " " + rep.last_name : ""}`.trim() || undefined;
+        let content: RepBuildEmailContent | null = null;
+        if (stage === "live" && previewUrl) {
+          content = buildLiveEmail({ businessName, previewUrl, repName });
+        } else if (stage === "build_failed") {
+          content = buildFailedEmail({ businessName, error: errorMessage ?? undefined, repName });
+        }
+        if (content) await sendRepBuildEmail(rep.email, content);
+      } catch (e) {
+        console.error("[tpl:sl-callback] rep email failed:", e);
+      }
+    });
   }
 
   return NextResponse.json({ ok: true, applied: 1, ignored: 0 });

@@ -42,3 +42,19 @@ export async function isTemplateReady(db: SupabaseClient, slug: string): Promise
     .maybeSingle();
   return Boolean((data as { sl_template_ready?: boolean } | null)?.sl_template_ready);
 }
+
+/**
+ * Resolve a picked tpl_industries slug to its ReadyIndustry (incl. sl_slug) IFF
+ * it currently has a live template, else null. One query that both gates
+ * readiness and hands back the sl_slug the rep flow stamps + builds with.
+ */
+export async function getReadyIndustry(db: SupabaseClient, slug: string): Promise<ReadyIndustry | null> {
+  const { data } = await db
+    .from("tpl_industries")
+    .select("slug, display_name, sl_slug, sl_template_ready")
+    .eq("slug", slug)
+    .maybeSingle();
+  const row = data as (ReadyIndustry & { sl_template_ready?: boolean }) | null;
+  if (!row?.sl_template_ready) return null;
+  return { slug: row.slug, display_name: row.display_name, sl_slug: row.sl_slug };
+}

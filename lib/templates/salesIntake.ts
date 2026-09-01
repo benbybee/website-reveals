@@ -115,7 +115,7 @@ function campaignName(rep: SalesRepInfo): string {
  * the rep is known (unique index enforces one per rep); falls back to matching by
  * name when the submission can't be attributed to a sales_reps row.
  */
-async function findOrCreateSalesCampaign(
+export async function findOrCreateSalesCampaign(
   db: SupabaseClient,
   rep: SalesRepInfo,
 ): Promise<string> {

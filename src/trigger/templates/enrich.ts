@@ -2,7 +2,7 @@ import { task, logger, wait } from "@trigger.dev/sdk/v3";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { tplDb } from "@/lib/templates/db";
 import { runActor, recordCostFromRun } from "@/lib/templates/apify/client";
-import { assembleRecord } from "@/lib/templates/enrich";
+import { assembleRecord, verifyAndScore } from "@/lib/templates/enrich";
 import { promotedColumns } from "@/lib/templates/promotedColumns";
 import {
   ENRICH_BATCH_SIZE,
@@ -332,7 +332,7 @@ export const tplEnrichBatchTask = task({
         }
 
         const gbpCategories = cleanedPlace.industry_raw ? [cleanedPlace.industry_raw] : [];
-        const { record, score } = assembleRecord({
+        const { record: assembled } = assembleRecord({
           place: cleanedPlace,
           facebook,
           gbpCategories,
@@ -340,6 +340,11 @@ export const tplEnrichBatchTask = task({
           brandColors: dnaColors,
           industrySlug: payload.industrySlug,
         });
+
+        // Gap 3: dnaLogo/facebook.logo + photos were merged AFTER the discover-time
+        // verify (cleanedPlace), so HEAD-verify the merged assets and re-score on
+        // what survives — otherwise a dead Firecrawl/FB logo ships as fetch_verified.
+        const { record, score } = await verifyAndScore(assembled);
 
         const stage = resolveStage({
           preserveStage,

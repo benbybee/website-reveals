@@ -2,6 +2,7 @@ import type { BrandColors, CanonicalRecord, LogoAsset } from "../types";
 import { scoreRecord, type ScoreResult } from "../score/gate";
 import { deriveServices } from "./services";
 import { brandColorsFromPalette } from "./colors";
+import { verifyAssets } from "./verifyAssets";
 
 export interface AssembleInput {
   /** Partial record from the places mapper. */
@@ -85,5 +86,19 @@ export function assembleRecord(input: AssembleInput): AssembleOutput {
   const score = scoreRecord(record);
   record.confidence = score.confidence;
 
+  return { record, score };
+}
+
+/**
+ * Gap 3: the Firecrawl/Facebook logo + photos are merged into the record by
+ * assembleRecord AFTER the discover-time verify, so a dead merged logo would
+ * otherwise ship (and be persisted as fetch_verified). HEAD-verify the assembled
+ * record's assets, then re-score on what actually survives, before persisting /
+ * pushing. Shared by the enrich Trigger task and the rep-flow quickEnrich.
+ */
+export async function verifyAndScore(assembled: CanonicalRecord): Promise<AssembleOutput> {
+  const record = await verifyAssets(assembled);
+  const score = scoreRecord(record);
+  record.confidence = score.confidence;
   return { record, score };
 }

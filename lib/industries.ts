@@ -1,5 +1,10 @@
 import { createServerClient } from "@/lib/supabase/server";
 
+// ⚠️ Taxonomy boundary (gap 4): this file is the inbound sales-FORM taxonomy +
+// reference resolution ONLY. The canonical taxonomy for template BUILDING is
+// tpl_industries (see lib/templates/industries.ts + lib/templates/industries/
+// registry.ts). Do NOT use INDUSTRY_CATEGORIES for template selection.
+
 /**
  * Canonical industry catalog. Hardcoded because the list is stable; if a
  * category needs to be added, do it in code so the dropdown stays in sync

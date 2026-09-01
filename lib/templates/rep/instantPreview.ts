@@ -4,7 +4,6 @@ import { repSpentTodayUsd, withinRepBudget, repBuildsToday, withinRepBuildLimit 
 import {
   REP_DAILY_BUDGET_USD,
   REP_DAILY_BUILD_LIMIT,
-  SL_TEMPLATE_BUILD_EST_USD,
   SL_TEMPLATE_TRANSPORT,
 } from "../config";
 import { findOrCreateSalesCampaign } from "../salesIntake";
@@ -117,25 +116,10 @@ export async function runInstantPreview(input: InstantPreviewInput): Promise<Ins
   const transport = SL_TEMPLATE_TRANSPORT() === "table" ? "table" : "post";
   const push = await assembleAndPush(db, campaignId, { prospectIds: [prospectId], transport });
 
-  // Ledger the estimated SL build cost (stage 'build') so the per-rep dollar gate
-  // + rollups reflect the dominant cost, not just WR's ~$0.02 of Places/Firecrawl.
-  // An estimate until SL reports real cost (G-C4). Best-effort — bookkeeping
-  // never fails the build. Only when a build was actually dispatched.
-  if (push.recordCount > 0) {
-    try {
-      await db.from("tpl_cost_events").insert({
-        campaign_id: campaignId,
-        stage: "build",
-        actor: "sitelaunchr",
-        units: 1,
-        usd: SL_TEMPLATE_BUILD_EST_USD(),
-        rep_id: rep.rep_id,
-        run_id: null,
-      });
-    } catch {
-      /* ignore */
-    }
-  }
+  // The real SL build cost is recorded when the terminal callback lands (it now
+  // carries cost_usd/usage — see the wr-template callback route). No estimate is
+  // written here, to avoid double-counting; the pre-build dollar gate already
+  // projects the cost via estimateInstantPreviewUsd.
 
   return { ok: true, prospectId, batchId: push.batchId, recordCount: push.recordCount };
 }

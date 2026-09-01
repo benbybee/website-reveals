@@ -56,12 +56,12 @@ describe("slTemplatePhotosEnabled", () => {
 });
 
 describe("REP_DAILY_BUDGET_USD", () => {
-  it("defaults to 150 when unset (accommodates ~30 builds × ~$4)", () => {
-    expect(REP_DAILY_BUDGET_USD()).toBe(150);
+  it("defaults to 10 when unset (loose backstop; count cap is the real guard)", () => {
+    expect(REP_DAILY_BUDGET_USD()).toBe(10);
   });
-  it("defaults to 150 for a non-numeric value", () => {
+  it("defaults to 10 for a non-numeric value", () => {
     process.env.REP_DAILY_BUDGET_USD = "not-a-number";
-    expect(REP_DAILY_BUDGET_USD()).toBe(150);
+    expect(REP_DAILY_BUDGET_USD()).toBe(10);
   });
   it("reads a numeric override", () => {
     process.env.REP_DAILY_BUDGET_USD = "12.5";
@@ -84,8 +84,8 @@ describe("REP_DAILY_BUILD_LIMIT", () => {
 });
 
 describe("SL_TEMPLATE_BUILD_EST_USD", () => {
-  it("defaults to 4 when unset", () => {
-    expect(SL_TEMPLATE_BUILD_EST_USD()).toBe(4);
+  it("defaults to 0.03 when unset (SL's confirmed worst-case)", () => {
+    expect(SL_TEMPLATE_BUILD_EST_USD()).toBe(0.03);
   });
   it("reads a numeric override", () => {
     process.env.SL_TEMPLATE_BUILD_EST_USD = "6.5";

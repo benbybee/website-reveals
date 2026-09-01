@@ -41,8 +41,8 @@ function mockDb(cfg: { rows?: { usd: number | null }[]; count?: number }) {
 }
 
 describe("estimateInstantPreviewUsd", () => {
-  it("is WR metered (~$0.021) + the SL build estimate ($4 default)", () => {
-    expect(estimateInstantPreviewUsd()).toBeCloseTo(4.021, 5);
+  it("is WR metered (~$0.021) + the SL build estimate ($0.03 default)", () => {
+    expect(estimateInstantPreviewUsd()).toBeCloseTo(0.051, 5);
   });
   it("tracks the SL build estimate override", () => {
     process.env.SL_TEMPLATE_BUILD_EST_USD = "6";
@@ -62,16 +62,16 @@ describe("repSpentTodayUsd", () => {
 });
 
 describe("withinRepBudget", () => {
-  it("is true when spent + estimate is within the default $150 cap", () => {
-    expect(withinRepBudget(145)).toBe(true); // 149.021 <= 150
+  it("is true when spent + estimate is within the default $10 cap", () => {
+    expect(withinRepBudget(9.9)).toBe(true); // 9.951 <= 10
   });
   it("is false when spent + estimate exceeds the cap", () => {
-    expect(withinRepBudget(146)).toBe(false); // 150.021 > 150
+    expect(withinRepBudget(9.95)).toBe(false); // 10.001 > 10
   });
   it("respects a REP_DAILY_BUDGET_USD override", () => {
     process.env.REP_DAILY_BUDGET_USD = "8";
-    expect(withinRepBudget(3)).toBe(true); // 7.021 <= 8
-    expect(withinRepBudget(4)).toBe(false); // 8.021 > 8
+    expect(withinRepBudget(7)).toBe(true); // 7.051 <= 8
+    expect(withinRepBudget(8)).toBe(false); // 8.051 > 8
   });
 });
 

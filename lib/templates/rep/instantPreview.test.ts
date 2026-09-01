@@ -54,14 +54,14 @@ describe("runInstantPreview — guards", () => {
   });
 
   it("rejects when the rep is over the daily dollar budget (no paid Places call)", async () => {
-    // Under the build-count cap, but recorded spend + one build's estimate > $150.
-    const db = mockDb({ industry: readyIndustry, buildCount: 2, spentRows: [{ usd: 150 }] });
+    // Under the build-count cap, but recorded spend + one build's estimate > $10 cap.
+    const db = mockDb({ industry: readyIndustry, buildCount: 2, spentRows: [{ usd: 10 }] });
     const out = await runInstantPreview({
       db: db as never,
       rep,
       placeId: "place-1",
       industrySlug: "hvac",
     });
-    expect(out).toEqual({ ok: false, code: "over_budget", cap: 150 });
+    expect(out).toEqual({ ok: false, code: "over_budget", cap: 10 });
   });
 });

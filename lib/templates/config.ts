@@ -14,22 +14,22 @@ export const googlePlacesEnabled = () => GOOGLE_PLACES_API_KEY().length > 0;
 export const slTemplatePhotosEnabled = () =>
   (process.env.SL_TEMPLATE_PHOTOS_ENABLED ?? "").trim().toLowerCase() === "true";
 
-// Estimated SL build cost per template build (USD). UNCONFIRMED — real per-build
-// cost attribution is blocked on SL (gap G-C4); update this when SL provides the
-// number. Folded into the rep instant-preview dollar gate AND recorded as a
-// per-build cost event so the ledger reflects the dominant cost, not just WR's
-// ~$0.02 of Places/Firecrawl.
-export const SL_TEMPLATE_BUILD_EST_USD = () => Number(process.env.SL_TEMPLATE_BUILD_EST_USD ?? "4") || 4;
+// Estimated SL build cost per template build (USD), for the PRE-build dollar gate
+// projection. SL confirmed real cost is ~$0.005–0.03 (gemini-flash-lite chunked
+// fill; not $4), and now emits real `cost_usd` on the callback (G-C4 closing), so
+// this is only the worst-case projection until the real cost lands. Override via
+// env if SL's numbers move.
+export const SL_TEMPLATE_BUILD_EST_USD = () => Number(process.env.SL_TEMPLATE_BUILD_EST_USD ?? "0.03") || 0.03;
 
 // Hard per-rep/day cap on the NUMBER of instant-preview builds — the primary
-// runaway guard, independent of the fuzzy per-build dollar estimate.
+// runaway guard (real per-build cost is ~cents, so this, not the dollar cap,
+// is the meaningful limit).
 export const REP_DAILY_BUILD_LIMIT = () => Number(process.env.REP_DAILY_BUILD_LIMIT ?? "30") || 30;
 
-// Per-rep daily instant-preview DOLLAR ceiling (USD): WR metered spend + the
-// estimated SL build cost. Default accommodates REP_DAILY_BUILD_LIMIT builds at
-// the current estimate (~30 × ~$4), so the count cap is the primary limiter and
-// this dollar cap is the cost-overrun backstop.
-export const REP_DAILY_BUDGET_USD = () => Number(process.env.REP_DAILY_BUDGET_USD ?? "150") || 150;
+// Per-rep daily instant-preview DOLLAR ceiling (USD): WR metered spend + the SL
+// build cost. A loose backstop — at ~cents/build the count cap binds long before
+// this. Default $10 sits far above 30 builds × ~$0.05 so it never wrongly blocks.
+export const REP_DAILY_BUDGET_USD = () => Number(process.env.REP_DAILY_BUDGET_USD ?? "10") || 10;
 
 // Firecrawl powers the brand-DNA enrichment step (logo + primary color from the
 // business website). Empty key = DNA step is skipped (prospect keeps GBP data

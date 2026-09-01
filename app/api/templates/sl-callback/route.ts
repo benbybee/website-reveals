@@ -3,6 +3,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { verifyCallback } from "@/lib/sitelaunchr";
 import { templatesEnabled, SL_TEMPLATE_HMAC_SECRET } from "@/lib/templates/config";
 import { slStatusToStage } from "@/lib/templates/sl/callbackStatus";
+import { resolveBuildCostUsd } from "@/lib/templates/sl/buildCost";
 import { getSalesRepById } from "@/lib/sales-reps";
 import { isNotificationEnabled } from "@/lib/notification-settings";
 import {
@@ -23,6 +24,18 @@ interface TplCallbackBody {
   // SL's terminal preview URL arrives as site_url (there is no preview_url field).
   site_url?: string | null;
   error_message?: string | null;
+  // Real per-build cost (G-C4): SL emits cost_usd (preferred, verbatim) and/or a
+  // usage token block on terminal callbacks; WR records it in tpl_cost_events.
+  cost_usd?: number | null;
+  usage?: {
+    model?: string | null;
+    input_tokens?: number | null;
+    output_tokens?: number | null;
+    cache_creation_input_tokens?: number | null;
+    cache_read_input_tokens?: number | null;
+    cache_creation_tokens?: number | null;
+    cache_read_tokens?: number | null;
+  } | null;
 }
 
 /**
@@ -75,7 +88,7 @@ export async function POST(req: NextRequest) {
   const supabase = createServerClient();
   const { data: existing } = await supabase
     .from("tpl_prospects")
-    .select("record, sales_rep_id, business_name")
+    .select("record, sales_rep_id, business_name, campaign_id")
     .eq("source_id", key)
     .maybeSingle();
   if (!existing) {
@@ -100,6 +113,42 @@ export async function POST(req: NextRequest) {
     .eq("source_id", key);
   if (updErr) {
     return NextResponse.json({ error: "update_failed" }, { status: 500 });
+  }
+
+  // Real build-cost attribution (G-C4): terminal callbacks carry cost_usd/usage.
+  // Record it in tpl_cost_events (stage 'build'), idempotent on run_id (= sl
+  // build_id) so a re-delivered callback never double-counts. Best-effort — cost
+  // bookkeeping must never break the callback SL retries against.
+  if ((stage === "live" || stage === "build_failed") && body.build_id) {
+    const cost = resolveBuildCostUsd(body);
+    const campaignId = (existing as { campaign_id?: string | null }).campaign_id ?? null;
+    if (cost !== null && campaignId) {
+      const repId = (existing as { sales_rep_id?: string | null }).sales_rep_id ?? null;
+      const buildId = body.build_id;
+      after(async () => {
+        try {
+          const { data: dup } = await supabase
+            .from("tpl_cost_events")
+            .select("id")
+            .eq("actor", "sitelaunchr")
+            .eq("stage", "build")
+            .eq("run_id", buildId)
+            .maybeSingle();
+          if (dup) return;
+          await supabase.from("tpl_cost_events").insert({
+            campaign_id: campaignId,
+            stage: "build",
+            actor: "sitelaunchr",
+            units: 1,
+            usd: cost,
+            rep_id: repId,
+            run_id: buildId,
+          });
+        } catch (e) {
+          console.error("[tpl:sl-callback] build cost record failed:", e);
+        }
+      });
+    }
   }
 
   // Rep instant-preview escalation (ADR 0007): when a rep-originated build

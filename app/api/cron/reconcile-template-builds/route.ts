@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { tplDb } from "@/lib/templates/db";
 import { templatesEnabled } from "@/lib/templates/config";
 import { readBuild, reconcileAction } from "@/lib/templates/sl/readBuild";
+import { escalateTerminalBuild } from "@/lib/templates/sl/escalateBuild";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
 
   const { data: stuck, error } = await db
     .from("tpl_prospects")
-    .select("id, source_id, sl_build_id, record")
+    .select("id, source_id, sl_build_id, record, business_name, sales_rep_id, campaign_id")
     .eq("stage", "building")
     .not("sl_build_id", "is", null)
     .lt("updated_at", cutoff)
@@ -65,22 +66,51 @@ export async function GET(req: NextRequest) {
     const action = reconcileAction(read.build);
     const record = (p.record as Record<string, unknown>) || {};
 
+    // Recovery must replay the escalation the dropped callback would have fired
+    // (rep email); cost isn't available from the read path, so costUsd is null.
+    const esc = {
+      sourceId: p.source_id as string,
+      businessName: (p.business_name as string | null) ?? null,
+      salesRepId: (p.sales_rep_id as string | null) ?? null,
+      campaignId: (p.campaign_id as string | null) ?? null,
+      buildId,
+      costUsd: null,
+    };
+
     if (action.kind === "live") {
       record.preview_url = action.preview_url;
       const { error: upErr } = await db
         .from("tpl_prospects")
         .update({ stage: "live", preview_url: action.preview_url, record, updated_at: new Date().toISOString() })
         .eq("id", p.id);
-      if (upErr) errors += 1;
-      else recovered += 1;
+      if (upErr) {
+        errors += 1;
+      } else {
+        recovered += 1;
+        await escalateTerminalBuild(db, {
+          ...esc,
+          stage: "live",
+          previewUrl: action.preview_url,
+          errorMessage: null,
+        });
+      }
     } else if (action.kind === "build_failed") {
       record.build_error = action.error;
       const { error: upErr } = await db
         .from("tpl_prospects")
         .update({ stage: "build_failed", record, updated_at: new Date().toISOString() })
         .eq("id", p.id);
-      if (upErr) errors += 1;
-      else failed += 1;
+      if (upErr) {
+        errors += 1;
+      } else {
+        failed += 1;
+        await escalateTerminalBuild(db, {
+          ...esc,
+          stage: "build_failed",
+          previewUrl: null,
+          errorMessage: action.error,
+        });
+      }
     } else {
       waiting += 1; // still genuinely building on SL's side
     }

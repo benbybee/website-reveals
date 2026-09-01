@@ -4,14 +4,7 @@ import { verifyCallback } from "@/lib/sitelaunchr";
 import { templatesEnabled, SL_TEMPLATE_HMAC_SECRET } from "@/lib/templates/config";
 import { slStatusToStage } from "@/lib/templates/sl/callbackStatus";
 import { resolveBuildCostUsd } from "@/lib/templates/sl/buildCost";
-import { getSalesRepById } from "@/lib/sales-reps";
-import { isNotificationEnabled } from "@/lib/notification-settings";
-import {
-  buildLiveEmail,
-  buildFailedEmail,
-  sendRepBuildEmail,
-  type RepBuildEmailContent,
-} from "@/lib/templates/mail/repBuildEmail";
+import { escalateTerminalBuild } from "@/lib/templates/sl/escalateBuild";
 
 // SL posts one flat callback per phase transition (not a batch). We key on the
 // echoed external_id (== our source_id). Only the fields we consume are typed;
@@ -115,71 +108,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "update_failed" }, { status: 500 });
   }
 
-  // Real build-cost attribution (G-C4): terminal callbacks carry cost_usd/usage.
-  // Record it in tpl_cost_events (stage 'build'), idempotent on run_id (= sl
-  // build_id) so a re-delivered callback never double-counts. Best-effort — cost
-  // bookkeeping must never break the callback SL retries against.
-  if ((stage === "live" || stage === "build_failed") && body.build_id) {
+  // Terminal-build escalation (rep email + real cost) — shared with the reconcile
+  // cron so a dropped-callback recovery is a full-fidelity replay. Runs after the
+  // ack; the helper is best-effort and never throws. cost_usd/usage rides the
+  // terminal callback (G-C4); the reconcile path has no cost, so it passes null.
+  if (stage === "live" || stage === "build_failed") {
+    const ex = existing as {
+      sales_rep_id?: string | null;
+      business_name?: string | null;
+      campaign_id?: string | null;
+    };
     const cost = resolveBuildCostUsd(body);
-    const campaignId = (existing as { campaign_id?: string | null }).campaign_id ?? null;
-    if (cost !== null && campaignId) {
-      const repId = (existing as { sales_rep_id?: string | null }).sales_rep_id ?? null;
-      const buildId = body.build_id;
-      after(async () => {
-        try {
-          const { data: dup } = await supabase
-            .from("tpl_cost_events")
-            .select("id")
-            .eq("actor", "sitelaunchr")
-            .eq("stage", "build")
-            .eq("run_id", buildId)
-            .maybeSingle();
-          if (dup) return;
-          await supabase.from("tpl_cost_events").insert({
-            campaign_id: campaignId,
-            stage: "build",
-            actor: "sitelaunchr",
-            units: 1,
-            usd: cost,
-            rep_id: repId,
-            run_id: buildId,
-          });
-        } catch (e) {
-          console.error("[tpl:sl-callback] build cost record failed:", e);
-        }
-      });
-    }
-  }
-
-  // Rep instant-preview escalation (ADR 0007): when a rep-originated build
-  // (source_id wr-gbp-*) reaches a terminal stage, email the submitting rep the
-  // preview URL (live) or a failure notice. Best-effort, after the ack, gated on
-  // rep notifications — it must never break the callback SL retries against.
-  if (key.startsWith("wr-gbp-") && (stage === "live" || stage === "build_failed")) {
-    const repId = (existing as { sales_rep_id?: string | null }).sales_rep_id ?? null;
-    const businessName =
-      (existing as { business_name?: string | null }).business_name ?? "your prospect";
-    const previewUrl = body.site_url ?? null;
-    const errorMessage = body.error_message ?? null;
-    after(async () => {
-      try {
-        if (!repId) return;
-        if (!(await isNotificationEnabled("sales_rep"))) return;
-        const rep = await getSalesRepById(repId);
-        if (!rep?.email) return;
-        const repName =
-          `${rep.first_name}${rep.last_name ? " " + rep.last_name : ""}`.trim() || undefined;
-        let content: RepBuildEmailContent | null = null;
-        if (stage === "live" && previewUrl) {
-          content = buildLiveEmail({ businessName, previewUrl, repName });
-        } else if (stage === "build_failed") {
-          content = buildFailedEmail({ businessName, error: errorMessage ?? undefined, repName });
-        }
-        if (content) await sendRepBuildEmail(rep.email, content);
-      } catch (e) {
-        console.error("[tpl:sl-callback] rep email failed:", e);
-      }
-    });
+    after(() =>
+      escalateTerminalBuild(supabase, {
+        sourceId: key,
+        stage,
+        businessName: ex.business_name ?? null,
+        salesRepId: ex.sales_rep_id ?? null,
+        campaignId: ex.campaign_id ?? null,
+        previewUrl: body.site_url ?? null,
+        errorMessage: body.error_message ?? null,
+        buildId: body.build_id ?? null,
+        costUsd: cost,
+      }),
+    );
   }
 
   return NextResponse.json({ ok: true, applied: 1, ignored: 0 });

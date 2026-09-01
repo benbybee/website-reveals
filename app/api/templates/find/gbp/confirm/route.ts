@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { lookup } from "node:dns/promises";
+import net from "node:net";
 import { requireSalesRepAuth } from "@/lib/sales-rep-auth";
 import { templatesEnabled, googlePlacesEnabled } from "@/lib/templates/config";
 import { tplDb } from "@/lib/templates/db";
@@ -18,13 +20,52 @@ export const dynamic = "force-dynamic";
  * rep_id (never a client-supplied id). Over-budget → 402; not-ready → 400.
  */
 
+// Reject loopback / private / link-local / reserved addresses so the homepage
+// fetch can't be steered at internal services or the cloud metadata endpoint.
+function isPrivateIp(ip: string): boolean {
+  if (net.isIPv4(ip)) {
+    const [a, b] = ip.split(".").map(Number);
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 169 && b === 254) || // link-local incl. 169.254.169.254 metadata
+      a >= 224 // multicast/reserved
+    );
+  }
+  const low = ip.toLowerCase();
+  return (
+    low === "::1" ||
+    low === "::" ||
+    low.startsWith("fc") ||
+    low.startsWith("fd") || // unique-local
+    low.startsWith("fe80") || // link-local
+    low.startsWith("::ffff:127.") ||
+    low.startsWith("::ffff:10.") ||
+    low.startsWith("::ffff:192.168.")
+  );
+}
+
+async function hostIsPublic(hostname: string): Promise<boolean> {
+  try {
+    const addrs = await lookup(hostname, { all: true });
+    return addrs.length > 0 && addrs.every((a) => !isPrivateIp(a.address));
+  } catch {
+    return false;
+  }
+}
+
 // Best-effort homepage fetch feeding the deterministic enricher. The URL comes
-// from Google Places (a public business site), GET only, http(s) only, timed
-// out and size-capped — a bounded SSRF surface, not attacker-supplied.
+// from Google Places (a public business site), but is still validated: http(s)
+// only, the resolved host must be a PUBLIC IP (no SSRF into internal services /
+// the metadata endpoint), GET only, timed out and response-size capped.
 async function fetchHomepage(url: string): Promise<string | null> {
   try {
     const u = new URL(url);
     if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    if (!(await hostIsPublic(u.hostname))) return null;
     const res = await fetch(url, {
       redirect: "follow",
       signal: AbortSignal.timeout(8000),

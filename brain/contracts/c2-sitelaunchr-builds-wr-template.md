@@ -5,7 +5,7 @@
 - **Direction:** outbound (WR → SL)
 - **Partner:** SiteLaunchr
 - **Locality:** distributed remote
-- **Version / change doctrine:** additive-only on `brief`; `brief.industry` MUST be SL's controlled-vocabulary slug (template selection key)
+- **Version / change doctrine:** additive-only on `brief`; `brief.industry` MUST be SL's controlled-vocabulary slug (template selection key). Latest additive change: optional `brief.photos[]` (ADR 0007), **flag-gated by `SL_TEMPLATE_PHOTOS_ENABLED` (default off)** — see below.
 - **Lifecycle:** active
 
 ## Endpoint / event
@@ -31,12 +31,14 @@ From [`lib/templates/sl/toBuildPayload.ts`](../../lib/templates/sl/toBuildPayloa
     "all_services": "svc, svc",            // optional
     "address": "street, city, ST zip",     // optional
     "contact_phone": "...", "contact_email": "...",  // optional
-    "logo_url": "...", "brand_colors": ["#.."]       // brand DNA, optional
+    "logo_url": "...", "brand_colors": ["#.."],      // brand DNA, optional
+    "photos": [{ "url": "...", "slot": "hero", "alt": "..." }]  // optional, flag-gated (see below)
   }
 }
 ```
 - **No `kura{}` block at intake** — owner/kura data is a Stage-2 input ([C3](./c3-sitelaunchr-conversions.md)).
-- **Photos are NOT shipped** — operator bakes imagery into templates; only business info + logo + colors are injected.
+- **`brief.photos[]` (ADR 0007) — additive, flag-gated, OFF by default.** Shape: `{ url: string; slot?: string; alt?: string }[]` (own-site + place photos from the deterministic enricher, hero-first slots). Emitted by `toBuildPayload` **only** when `SL_TEMPLATE_PHOTOS_ENABLED=true` **and** the record has photos; otherwise the key is omitted and the brief is byte-identical to the pre-photos shape. Empty slots fall back to stock bundled in the SL template. **WR must not enable the flag until SL templates declare photo slots and `/api/builds` accepts `photos[]`.** Coordinated deploy: ADR 0007 → `/cross-repo-review` → SL ships photo slots → flip `SL_TEMPLATE_PHOTOS_ENABLED=true` in WR.
+- **`sl_template_ready` sync (gap 1/4).** `tpl_industries.sl_template_ready` (WR-side) gates which industries WR will build; it must be flipped `true` for an industry **only after** SL ships that industry's template (a one-line `UPDATE`, the coordinated-deploy switch). A pre-dispatch guard (`assembleAndPush`) also drops any prospect whose `industry_slug` is not in the ready set, so a stale flag fails safe (skip, not a broken build).
 
 ## Conformance checks
 - Single mapper `toBuildPayload`; single validator `validateBuildPayload` (requires `external_id`, `form_type`, `brief.business_name`, `brief.industry`).

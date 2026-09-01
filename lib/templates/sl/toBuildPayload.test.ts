@@ -1,6 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { toBuildPayload, validateBuildPayload } from "./toBuildPayload";
 import type { CanonicalRecord } from "../types";
+
+afterEach(() => {
+  delete process.env.SL_TEMPLATE_PHOTOS_ENABLED;
+});
 
 const rec: CanonicalRecord = {
   source_id: "wr-tpl-ChIJ123",
@@ -72,6 +76,31 @@ describe("toBuildPayload", () => {
     expect(p.brief.brand_colors).toBeUndefined();
     expect(p.brief.logo_url).toBeUndefined();
     expect(validateBuildPayload(p).ok).toBe(true);
+  });
+});
+
+describe("toBuildPayload — photos[] (C2, SL_TEMPLATE_PHOTOS_ENABLED)", () => {
+  it("emits NO photos key when the flag is off (default) — byte-identical to today", () => {
+    const p = toBuildPayload(rec);
+    expect(p.brief).not.toHaveProperty("photos");
+  });
+
+  it("maps record.photos → brief.photos[{url,slot,alt}] when the flag is on", () => {
+    process.env.SL_TEMPLATE_PHOTOS_ENABLED = "true";
+    const p = toBuildPayload(rec);
+    expect(p.brief.photos).toEqual([
+      { url: "https://x/hero.jpg", slot: "hero", alt: "front" },
+      { url: "https://x/s1.jpg", slot: "service-1" },
+      { url: "https://x/s2.jpg", slot: "service-2" },
+    ]);
+  });
+
+  it("emits no photos key when the flag is on but the record has none", () => {
+    process.env.SL_TEMPLATE_PHOTOS_ENABLED = "true";
+    const { photos, ...noPhotos } = rec;
+    void photos;
+    const p = toBuildPayload(noPhotos as CanonicalRecord);
+    expect(p.brief).not.toHaveProperty("photos");
   });
 });
 

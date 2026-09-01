@@ -1,4 +1,5 @@
 import type { CanonicalRecord } from "../types";
+import { slTemplatePhotosEnabled } from "../config";
 
 export type SlFormType = "quick" | "standard" | "in-depth";
 
@@ -17,6 +18,10 @@ export interface BuildBrief {
   contact_email?: string; // optional on the Template path
   logo_url?: string; // dynamic business asset
   brand_colors?: string[];
+  // C2 (ADR 0007): own-site + place photos, mapped to template slots. Additive
+  // and flag-gated by SL_TEMPLATE_PHOTOS_ENABLED — omitted entirely (byte-
+  // identical to the pre-photos brief) until SL templates declare photo slots.
+  photos?: { url: string; slot?: string; alt?: string }[];
 }
 
 export interface BuildPayload {
@@ -39,9 +44,11 @@ function flattenAddress(a?: CanonicalRecord["address"]): string | undefined {
  * kura (owner_email/name/slug) is a Stage-2 conversion input supplied when a
  * prospect converts, not at intake.
  *
- * NOTE: Photos are NOT shipped to SL. The operator bakes imagery into each
- * template by hand; only business info + logo + colors are injected at build
- * time. The enrichment photo manifest stays WR-internal.
+ * NOTE: Photos are OFF by default. brief.photos[] is additive and gated by
+ * SL_TEMPLATE_PHOTOS_ENABLED (ADR 0007) — until the flag is on (and SL templates
+ * declare photo slots), only business info + logo + colors are injected and the
+ * brief is byte-identical to the pre-photos shape. Empty slots fall back to
+ * stock bundled in the SL template.
  */
 export function toBuildPayload(r: CanonicalRecord, formType: SlFormType = "quick"): BuildPayload {
   const brief: BuildBrief = {
@@ -67,6 +74,16 @@ export function toBuildPayload(r: CanonicalRecord, formType: SlFormType = "quick
     ? Object.values(r.brand_colors).filter((c): c is string => typeof c === "string" && c.trim().length > 0)
     : [];
   if (colors.length) brief.brand_colors = colors;
+
+  // C2 photos[] — only when the flag is on AND the record has photos.
+  if (slTemplatePhotosEnabled() && r.photos?.length) {
+    brief.photos = r.photos.map((p) => {
+      const photo: { url: string; slot?: string; alt?: string } = { url: p.src_url };
+      if (p.slot) photo.slot = p.slot;
+      if (p.alt) photo.alt = p.alt;
+      return photo;
+    });
+  }
 
   return { external_id: r.source_id, form_type: formType, brief };
 }

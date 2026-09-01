@@ -10,5 +10,6 @@ Architecture Decision Records — why WR is shaped the way it is. Format & lifec
 | [0004](./0004-prospect-filters-single-source.md) | Single-source prospect record edits + DNA/address filters | accepted |
 | [0005](./0005-no-payment-gate-v1.md) | No payment/Stripe gate on conversion in v1 | accepted |
 | [0006](./0006-template-callback-reconciliation.md) | Reconciliation backstop for missed wr-template build callbacks | proposed |
+| [0007](./0007-rep-instant-preview-and-photos-c2.md) | Rep instant-preview loop + optional `brief.photos[]` (C2 change) | proposed |
 
 > ADRs 0002–0005 are **retroactive** — they record decisions already implemented in the codebase, captured during the brain bootstrap so the "why" is not lost. 0001 is the bootstrap's own classification decision.

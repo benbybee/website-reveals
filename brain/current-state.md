@@ -8,7 +8,7 @@ WR runs two parallel businesses on one codebase: (1) an **inbound** path where a
 ## Platform facts
 - **App:** Next.js App Router. ~95 API routes across 11 subsystems. `middleware.ts` + `lib/admin-auth` / `portal-auth` / `sales-rep-auth` gate access.
 - **Background:** 8 Trigger.dev v3 tasks (`ai-estimate`, `ai-process-inbound`*, `ai-telegram-command`*, `tpl-discover`, `tpl-enrich`, `tpl-enrich-batch`, `tpl-deep-audit`, `tpl-backfill`, `tpl-mail-campaign`) + 3 Vercel crons (`reconcile-sl-builds`, `notify-abandoned-submissions`, `archive-completed-tasks`). *`ai-process-inbound` and `ai-telegram-command` are defined but **not dispatched** — inbound is handled inline in webhook routes (see gap matrix G-AI1).
-- **Data:** Supabase Postgres, 41 migrations. Service-role server-side; RLS minimal (service-role bypass — gap G-SEC1). Storage buckets: `form-uploads`, `tpl-postcards`.
+- **Data:** Supabase Postgres, 51 migrations. Service-role server-side; RLS minimal (service-role bypass — gap G-SEC1). Storage buckets: `form-uploads`, `tpl-postcards`.
 - **Deploy:** Vercel auto-deploy on push to `main`; Trigger.dev via pinned CLI.
 
 ## Subsystems (11)
@@ -18,7 +18,7 @@ Onboarding & Intake · External Webhooks & Callbacks · Auth & Sessions · Admin
 | Seam | Status |
 |---|---|
 | C1 SL `/api/builds` (`wr`) | active |
-| C2 SL `/api/builds` (`wr-template`) | active; transport `post` or `table` |
+| C2 SL `/api/builds` (`wr-template`) | active; transport `post` or `table`; **pre-dispatch coverage gate** (`tpl_industries.sl_template_ready`) + optional `brief.photos[]` behind `SL_TEMPLATE_PHOTOS_ENABLED` (off) — [ADR 0007](./decisions/0007-rep-instant-preview-and-photos-c2.md) |
 | C3 SL `/api/conversions` (Kura handoff) | active; retryable outcomes re-fired manually |
 | C4 SL → WR callbacks | active for status; **cost fields awaiting SL** (G-C4) |
 | C5 WR → Dispatchr lifecycle | active; **fire-and-forget, no delivery guarantee** (G-C5) |
@@ -27,6 +27,7 @@ Onboarding & Intake · External Webhooks & Callbacks · Auth & Sessions · Admin
 - **Enrich fan-out** (`tpl-enrich` → `tpl-enrich-batch`): the enrich step was refactored from one sequential run into a parent that fans out bounded child batches (size 5, concurrency 5) with claim-stale orphan recovery, so large campaigns can't hit the task duration limit. See [ADR 0003](./decisions/0003-enrich-fan-out.md).
 - **DNA + address clean-list filters** for the prospect CRM/export, with single-source record edits (drawer edits now mirror into the canonical `record`). See [ADR 0004](./decisions/0004-prospect-filters-single-source.md).
 - **Single-state campaigns** + full-control re-run; sales-rep submissions routed into the Template flow and held for template.
+- **Rep instant-preview loop** ([ADR 0007](./decisions/0007-rep-instant-preview-and-photos-c2.md)): a sales rep picks a template-ready industry, live-searches Google Business Profile (Google Places API), and WR runs a **deterministic-first, zero-LLM** quick-enrich (homepage HTML → logo/photos/palette + per-industry default services + mailto email; Firecrawl branding only on a logo+colors miss) into the rep's `kind='sales'` campaign, pushes a single speculative preview, and emails the rep the URL on `live`. Surface: `/sales-rep/instant`. Closes review gaps 1–5: coverage gate (`sl_template_ready`), thin-site fill (`photos[]`/colors/services/email), post-merge HEAD-verify (`verifyAndScore`), one canonical template taxonomy (`tpl_industries`), and a per-rep/day cost cap (`tpl_cost_events.rep_id`). `brief.photos[]` is wired but stays behind `SL_TEMPLATE_PHOTOS_ENABLED=false` until SL templates declare photo slots.
 
 ## Active known risks (top)
 - C5 Dispatchr events can be silently lost (no durable delivery).

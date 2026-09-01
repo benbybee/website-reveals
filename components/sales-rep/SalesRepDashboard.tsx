@@ -99,7 +99,8 @@ export function SalesRepDashboard({
           <h1 style={titleStyle}>Hi, {rep.first_name} 👋</h1>
           <p style={{ fontSize: "13px", color: "#888886", marginTop: "4px" }}>{rep.email}</p>
         </div>
-        <div style={{ display: "flex", gap: "10px" }}>
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          <a href="/sales-rep/instant" style={btnAccent}>Prospect Sites</a>
           <form action="/api/sales-rep/logout" method="POST">
             <button type="submit" style={btnGhost}>Sign out</button>
           </form>
@@ -692,6 +693,19 @@ const btnGhost: React.CSSProperties = {
   padding: "6px 14px",
   background: "transparent",
   cursor: "pointer",
+};
+const btnAccent: React.CSSProperties = {
+  fontFamily: "var(--font-sans)",
+  fontSize: "13px",
+  fontWeight: 600,
+  color: "#fff",
+  border: "1.5px solid #ff3d00",
+  borderRadius: "3px",
+  padding: "6px 14px",
+  background: "#ff3d00",
+  textDecoration: "none",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
 };
 const tabsRow: React.CSSProperties = {
   display: "flex",

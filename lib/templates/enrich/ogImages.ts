@@ -1,7 +1,9 @@
 // Deterministic homepage asset extraction (gap 2) — pure HTML parse, NO LLM and
 // NO Firecrawl. Pulls a logo candidate (apple-touch-icon → og:logo → favicon)
-// and content photos (og:image + hero <img>), absolutized against the page URL,
-// with data-URIs, tracking pixels, and tiny icons dropped.
+// and content photos (og:image + CSS hero backgrounds + real / lazy <img> +
+// srcset), absolutized against the page URL, with data-URIs, tracking pixels,
+// tiny icons, AND brand marks (logos / service icons / transparent PNGs) dropped
+// so a template's gallery gets real photography, not the logo repeated as icons.
 
 export interface SiteAssets {
   logoUrl?: string;
@@ -10,9 +12,16 @@ export interface SiteAssets {
 
 const MAX_PHOTOS = 6;
 
-// Obvious non-content junk: tracking beacons, spacers, analytics pixels.
+// Obvious non-content junk: tracking beacons, spacers, analytics pixels, sprites.
 const JUNK =
-  /(1x1|pixel|spacer|blank\.(gif|png)|beacon|\/tr\?|google-analytics|googletagmanager|doubleclick|facebook\.com\/tr)/i;
+  /(1x1|pixel|spacer|blank\.(gif|png)|beacon|\/tr\?|google-analytics|googletagmanager|doubleclick|facebook\.com\/tr|sprite)/i;
+
+// Brand marks are NOT content photos — the logo is captured separately, and
+// service-category icons / transparent PNGs are decoration, not photography.
+// `png-alpha` / `transparent` almost always signal an icon or logo on these
+// sites (real photos are opaque jpg/webp).
+const NON_PHOTO =
+  /(logo|favicon|apple-touch|png-alpha|transparent|[-_/]icons?[-_/.]|\bicons?\b|badge|award)/i;
 
 /** Parse the attributes of a single tag string into a lowercased-key map. */
 function attrs(tag: string): Record<string, string> {
@@ -46,6 +55,22 @@ function firstResolvable(candidates: (string | undefined)[], baseUrl: string): s
   return undefined;
 }
 
+/** Largest URL from a srcset ("a.jpg 320w, b.jpg 1200w") by width descriptor. */
+function largestFromSrcset(srcset?: string): string | undefined {
+  if (!srcset) return undefined;
+  let best: string | undefined;
+  let bestW = -1;
+  for (const part of srcset.split(",")) {
+    const [url, w] = part.trim().split(/\s+/);
+    const width = w && /^\d+w$/.test(w) ? parseInt(w, 10) : 0;
+    if (url && width >= bestW) {
+      bestW = width;
+      best = url;
+    }
+  }
+  return best;
+}
+
 export function extractSiteAssets(html: string, baseUrl: string): SiteAssets {
   const metas = tags(html, "meta");
   const links = tags(html, "link");
@@ -64,18 +89,31 @@ export function extractSiteAssets(html: string, baseUrl: string): SiteAssets {
     .filter((a) => ["og:image", "og:image:url", "og:image:secure_url"].includes(metaKey(a)))
     .map((a) => a.content);
 
+  // CSS background-image url(...) from inline styles + <style> blocks (heroes).
+  const bgUrls = [
+    ...html.matchAll(/background(?:-image)?\s*:\s*url\(\s*['"]?([^'")]+)['"]?\s*\)/gi),
+  ].map((m) => m[1]);
+
+  // Content imgs: real src + lazy attrs + the largest srcset. Drop declared-tiny.
   const imgSrcs = imgs
     .filter((a) => {
       const w = Number(a.width);
       const h = Number(a.height);
-      return !((w && w <= 32) || (h && h <= 32)); // drop declared-tiny icons
+      return !((w && w <= 32) || (h && h <= 32));
     })
-    .map((a) => a.src || a["data-src"]);
+    .flatMap((a) => [
+      a.src,
+      a["data-src"],
+      a["data-lazy-src"],
+      a["data-original"],
+      a["data-bg"],
+      largestFromSrcset(a.srcset),
+    ]);
 
   const seen = new Set<string>();
   const photos: string[] = [];
-  for (const raw of [...ogImages, ...imgSrcs]) {
-    if (!raw || JUNK.test(raw)) continue;
+  for (const raw of [...ogImages, ...bgUrls, ...imgSrcs]) {
+    if (!raw || JUNK.test(raw) || NON_PHOTO.test(raw)) continue;
     const u = resolveUrl(raw, baseUrl);
     if (!u || u === logoUrl || seen.has(u)) continue;
     seen.add(u);

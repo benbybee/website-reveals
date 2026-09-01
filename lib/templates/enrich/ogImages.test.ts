@@ -49,4 +49,34 @@ describe("extractSiteAssets", () => {
     expect(out.logoUrl).toBeUndefined();
     expect(out.photos).toEqual([]);
   });
+
+  it("drops logos, service icons, and transparent (png-alpha) images", () => {
+    // Mirrors the real parkerandsons.com case: a logo + white-transparent icons.
+    const html = `
+      <img src="https://wg.scene7.com/is/image/wrenchgroup/Primary-Logo-ps24?fmt=png-alpha" width="400" height="120">
+      <img src="https://wg.scene7.com/is/image/wrenchgroup/air-conditioning-white-transparent-ps22?fmt=png-alpha" width="120" height="120">
+      <img src="https://cdn.example.com/icons/service-icon.png" width="80" height="80">
+      <img src="https://cdn.example.com/photos/team-truck.jpg" width="1200" height="800">`;
+    const { photos } = extractSiteAssets(html, "https://example.com/");
+    expect(photos).toEqual(["https://cdn.example.com/photos/team-truck.jpg"]);
+  });
+
+  it("captures a CSS background-image (often the hero)", () => {
+    const html = `<style>.hero{background-image:url('/img/hero-crew.jpg')}</style>`;
+    const { photos } = extractSiteAssets(html, "https://example.com/");
+    expect(photos).toContain("https://example.com/img/hero-crew.jpg");
+  });
+
+  it("captures lazy-loaded images (data-src)", () => {
+    const html = `<img data-src="/img/lazy-jobsite.jpg" width="800" height="600" alt="job">`;
+    const { photos } = extractSiteAssets(html, "https://example.com/");
+    expect(photos).toContain("https://example.com/img/lazy-jobsite.jpg");
+  });
+
+  it("picks the largest candidate from srcset", () => {
+    const html = `<img srcset="/s/small.jpg 320w, /s/med.jpg 640w, /s/large.jpg 1200w" width="640" height="480">`;
+    const { photos } = extractSiteAssets(html, "https://example.com/");
+    expect(photos).toContain("https://example.com/s/large.jpg");
+    expect(photos.some((p) => p.includes("small.jpg"))).toBe(false);
+  });
 });

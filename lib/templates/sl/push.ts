@@ -2,6 +2,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CanonicalRecord } from "../types";
 import { toBuildPayload, type BuildPayload } from "./toBuildPayload";
 import { pushBuilds, type PushResult } from "./adapter";
+import { templateReadyBuildSlugs } from "../industries/registry";
+
+/** A prospect excluded from a push and why. */
+export interface SkippedProspect {
+  source_id: string;
+  industry: string;
+  reason: "template_not_ready";
+}
 
 /** Map a campaign's canonical records → SL per-build payloads. */
 export function buildPayloads(records: CanonicalRecord[]): BuildPayload[] {
@@ -14,6 +22,13 @@ export interface AssembleResult {
   recordCount: number;
   dryRun: boolean;
   push?: PushResult;
+  /**
+   * Gap 1: prospects dropped pre-dispatch because their industry has no live SL
+   * template (would fail at template selection). The rep picker already offers
+   * only ready industries, so this is defense-in-depth; the caller surfaces
+   * "N skipped — template not ready" to the operator/rep.
+   */
+  skipped?: SkippedProspect[];
   /**
    * Set only when `defer` was requested for the `post` transport: the built
    * payloads the caller must dispatch itself (after responding to the client).
@@ -65,7 +80,19 @@ export async function assembleAndPush(
   const { data, error } = await q;
   if (error) throw new Error(`failed loading prospects to push: ${error.message}`);
 
-  const records = ((data ?? []) as { record: CanonicalRecord }[]).map((r) => r.record);
+  const allRecords = ((data ?? []) as { record: CanonicalRecord }[]).map((r) => r.record);
+
+  // Gap 1: never dispatch a build for an industry SL has no live template for —
+  // it fails non-retryably at template selection. Drop unsupported slugs (the
+  // record's industry_slug is SL's sl_slug — see toBuildPayload) and report them.
+  const readySlugs = await templateReadyBuildSlugs(db);
+  const records: CanonicalRecord[] = [];
+  const skipped: SkippedProspect[] = [];
+  for (const r of allRecords) {
+    const industry = r.industry_slug || r.industry_raw || "";
+    if (readySlugs.has(industry)) records.push(r);
+    else skipped.push({ source_id: r.source_id, industry, reason: "template_not_ready" });
+  }
   const builds = buildPayloads(records);
 
   const { data: batchRow, error: insErr } = await db
@@ -89,6 +116,7 @@ export async function assembleAndPush(
     batchRowId,
     recordCount: builds.length,
     dryRun,
+    ...(skipped.length ? { skipped } : {}),
   };
 
   if (dryRun) return base;

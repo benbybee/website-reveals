@@ -62,3 +62,8 @@ Shipped M0–M8 (feat/rep-instant-preview → `main`, deployed). Gaps 1–5 clos
 2. **(2)** `POST /api/builds` accepts + stores + serves `brief.photos[]` → then WR flips `SL_TEMPLATE_PHOTOS_ENABLED=true` and real photos flow, overriding SL's baked stock fallback (sitelaunchr-builder #10) real-first.
 
 Neither needs a further WR or SL-worker change. SL-side coordination recorded in SL ADR 0009 + its coordination log.
+
+**Update (2026-09-02) — item 2 landed; second end-to-end test passed on a real client SPA.**
+- SL-app `POST /api/builds` now accepts + stores `brief.photos[]` (sitelaunchr PR #10 → `0c09bea`, deployed). Root cause had been the SL mapper silently dropping the field (the route schema was already permissive, so no 400 — just stock). WR flipped `SL_TEMPLATE_PHOTOS_ENABLED=true`.
+- **Sorensen & Co Garage Doors** (sorensen-co.com, a Vite SPA — the worst case for static extraction): WR produced a real logo + colors (Firecrawl via the SPA-branding fix) and **6 real Google Places photos**; SL built it in ~1.5 min; the rendered preview shows **13 Places-photo refs, the real logo, zero stock** (`https://5410cf17.sitelaunchr-sites.pages.dev`). Prospect → `live`, rep emailed. WR metered ≈ 6¢/build.
+- Remaining for full G-C4: SL-app **C4 relay must forward `cost_usd`/`usage`** (issue #9 item 1a) — no `build` cost row yet, as expected until it lands.

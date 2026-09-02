@@ -1,6 +1,6 @@
 # 0007 — Rep instant-preview loop + optional `brief.photos[]` (C2 change)
 
-- Status: **proposed** (2026-08-31). Implements [docs/plans/2026-08-31-rep-instant-preview-plan.md](../../docs/plans/2026-08-31-rep-instant-preview-plan.md) (design: [2026-08-31-rep-instant-preview-design.md](../../docs/plans/2026-08-31-rep-instant-preview-design.md)).
+- Status: **accepted + implemented** (2026-09-01; proposed 2026-08-31). Implements [docs/plans/2026-08-31-rep-instant-preview-plan.md](../../docs/plans/2026-08-31-rep-instant-preview-plan.md) (design: [2026-08-31-rep-instant-preview-design.md](../../docs/plans/2026-08-31-rep-instant-preview-design.md)). See the Follow-up section for the implementation + cross-repo outcome.
 - Date: 2026-08-31
 - Deciders: WR maintainer, operator; SiteLaunchr maintainer (cross-repo half — `brief.photos[]` + template photo slots)
 - Tier impact: none (Tier 3 unchanged; no new distributed *system*, one additive field on an existing seam)
@@ -48,3 +48,17 @@ Add a **new interactive loop** on top of the existing machinery, and fold the fi
 - **LLM enrichment (scrape → LLM → brief).** Rejected as the default: it is the expensive path and the design principle is deterministic-first. LLM stays out of the WR side entirely; Firecrawl is the only paid fallback and only on deterministic miss.
 - **Ship `photos[]` immediately (no flag).** Rejected: sending a field SL templates don't yet accept would fail builds or be silently dropped. Additive + flag-gated + coordinated-deploy is the only safe order — WR leads with the field OFF.
 - **Bake photos into templates only (no `brief.photos[]`).** Partial: stock fallback already lives in templates, but a prospect's *own* photos materially improve the preview. `photos[]` carries own-site imagery; stock fills the empty slots.
+
+## Follow-up — implemented + coordination outcome (2026-09-01)
+Shipped M0–M8 (feat/rep-instant-preview → `main`, deployed). Gaps 1–5 closed; ADR status → **accepted**.
+
+- **Live end-to-end test passed** (hvac / Parker & Sons): SL accepted the `wr-template` build (HTTP 200, `build_id 8c7d7530`), built it, and the `succeeded` callback drove the prospect → `live` with `preview_url`; rep email fired; Places `find` cost ledgered. Proved contract items (c) intake URL, (d) creds, (2) mapping, and the (3) C4 relay of `site_url` — empirically, not on a checklist.
+- **Enrichment hardened for real client sites** (beyond the plan): deterministic extractor now pulls real photos not logos/icons; Google Places business photos (`resolvePlacePhotoUrl`) fill the gap and are robust to JS-rendered sites; SPA-aware branding drops framework-default logos (`vite.svg`…) so Firecrawl renders the SPA for the real logo/colors. Validated on **sorensen-co.com** (a Vite SPA, garage-door): was `vite.svg` + nothing → now real logo + colors + 10 real Places photos.
+- **Cost (G-C4):** WR consumes `cost_usd`/`usage` on the `wr-template` callback **and** the reconcile-cron replay (shared `escalateTerminalBuild`, idempotent on `build_id`). SL's validator **accepts** the fields (1b green, HTTP 200 on build 33552033133).
+- **`sl_template_ready`:** all 6 industries flipped (migrations 050 + 052) after SL shipped + synced templates (sitelaunchr-builder #6).
+
+**Last mile (cross-repo, SL-app-repo — tracked in [benbybee/sitelaunchr#9]):**
+1. **(1a)** the C4 relay forwards `cost_usd`/`usage` to WR's callback URL (worker emits; SL-app relay must pass through) → then G-C4 fully closes for the template flow.
+2. **(2)** `POST /api/builds` accepts + stores + serves `brief.photos[]` → then WR flips `SL_TEMPLATE_PHOTOS_ENABLED=true` and real photos flow, overriding SL's baked stock fallback (sitelaunchr-builder #10) real-first.
+
+Neither needs a further WR or SL-worker change. SL-side coordination recorded in SL ADR 0009 + its coordination log.
